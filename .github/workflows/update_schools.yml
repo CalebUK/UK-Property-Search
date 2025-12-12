@@ -27,14 +27,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pandas beautifulsoup4
 
-### Summary of what this does:
-1.  **Scrapes Gov.uk** to find the *actual* rating file.
-2.  **Downloads** the main school list (locations).
-3.  **Joins** them together on the School ID (URN).
-4.  **Saves** a unified JSON file that your website reads.
-
-Now, whether you look at a school in Winnersh or a school in Manchester, it will have the correct location, nursery info, AND the latest Ofsted rating.
-
     - name: Run Fetch Script
       run: python fetch_schools.py
 
