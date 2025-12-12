@@ -1,0 +1,22 @@
+{
+  "name": "winnersh-property-scanner",
+  "version": "1.0.0",
+  "description": "Live property lifestyle scanner for Wokingham & Winnersh",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "property",
+    "real-estate",
+    "wokingham",
+    "winnersh",
+    "openstreetmap",
+    "gemini-ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "serve": "^14.2.1"
+  }
+}
