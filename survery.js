@@ -1,4 +1,6 @@
-// Global State for User Preferences
+// survey.js
+
+// 1. Initialize User Preferences
 window.userPrefs = {
     location: "Winnersh", 
     budget: 800000,
@@ -15,26 +17,17 @@ window.userPrefs = {
 let currentStep = 1;
 const totalSteps = 6;
 
-// --- EVENT LISTENERS ---
-// Listen for "Enter" key on the location input
-document.addEventListener('DOMContentLoaded', () => {
-    const locInput = document.getElementById('in-location');
-    if (locInput) {
-        locInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') window.nextStep();
-        });
-    }
-});
-
+// 2. Button Selection Logic
 window.selectBtn = function(btn, group) {
-    console.log("Button clicked:", group, btn.innerText);
-    document.querySelectorAll(`.btn-opt[onclick*="${group}"], .btn-opt-station[onclick*="${group}"]`).forEach(b => {
+    // Visual toggle
+    document.querySelectorAll(`.btn-opt[onclick*="'${group}'"], .btn-opt-station[onclick*="'${group}'"]`).forEach(b => {
         b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
         b.classList.add('bg-slate-700', 'text-slate-300');
     });
     btn.classList.remove('bg-slate-700', 'text-slate-300');
     btn.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
     
+    // Save value
     if (group === 'beds') window.userPrefs.minBeds = parseInt(btn.getAttribute('data-val'));
     if (group === 'station') {
         const val = btn.getAttribute('data-val');
@@ -42,19 +35,12 @@ window.selectBtn = function(btn, group) {
     }
 }
 
+// 3. Navigation Logic
 window.nextStep = function() {
-    console.log("Next Step triggered. Current:", currentStep);
-
-    // Capture Data based on current step
+    // Save input values before moving
     if (currentStep === 1) {
         const loc = document.getElementById('in-location');
-        if(loc && loc.value.trim() !== "") {
-            window.userPrefs.location = loc.value;
-            console.log("Location set to:", window.userPrefs.location);
-        } else {
-            // Shake effect or alert if empty (optional, keeping simple for now)
-            console.log("Location empty, using default");
-        }
+        if(loc && loc.value) window.userPrefs.location = loc.value;
     }
     else if (currentStep === 2) {
         const budget = document.getElementById('in-budget');
@@ -85,18 +71,11 @@ window.nextStep = function() {
         return;
     }
 
-    // UI Move
-    const currEl = document.getElementById(`step-${currentStep}`);
-    const nextEl = document.getElementById(`step-${currentStep + 1}`);
-    
-    if(currEl && nextEl) {
-        currEl.classList.remove('active');
-        currentStep++;
-        nextEl.classList.add('active');
-        updateWizardUI();
-    } else {
-        console.error("Missing step element!", currentStep);
-    }
+    // Animate to next step
+    document.getElementById(`step-${currentStep}`).classList.remove('active');
+    currentStep++;
+    document.getElementById(`step-${currentStep}`).classList.add('active');
+    updateWizardUI();
 }
 
 window.prevStep = function() {
@@ -118,23 +97,33 @@ function updateWizardUI() {
     else nextBtn.innerText = "Next";
 }
 
-window.finishWizard = function() {
-    console.log("Wizard Finished. Prefs:", window.userPrefs);
+function finishWizard() {
     const overlay = document.getElementById('wizard-overlay');
-    overlay.style.transition = 'opacity 0.5s';
     overlay.style.opacity = '0';
     setTimeout(() => {
         overlay.style.display = 'none';
         
-        // Populate the main search bar with the wizard choice
+        // Pass data to main search bar
         const searchInput = document.getElementById('postcode-input');
         if(searchInput) searchInput.value = window.userPrefs.location;
         
+        // Show UI
         document.getElementById('search-bar-container').classList.remove('hidden');
         document.getElementById('reset-btn').classList.remove('hidden');
         document.getElementById('results-panel').classList.remove('opacity-0');
         
-        // Trigger the search
+        // Trigger Main App Search (This function lives in app.js)
         if(window.startSearch) window.startSearch(); 
     }, 500);
 }
+
+// 4. Init Listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Allow pressing "Enter" on location step
+    const locInput = document.getElementById('in-location');
+    if (locInput) {
+        locInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') window.nextStep();
+        });
+    }
+});
