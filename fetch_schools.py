@@ -225,7 +225,9 @@ def process_data():
 
         # Nursery Check
         nursery_col = row.get('NurseryProvision (name)', '')
-        has_nursery = "has nursery" in str(nursery_col).lower() or "classes" in str(nursery_col).lower()
+        # Strict matching: Only "Has Nursery Classes" is valid. 
+        # "No Nursery Classes" or "Not applicable" will fail this check.
+        has_nursery = "has nursery classes" in str(nursery_col).lower()
 
         final_list.append({
             "name": name,
