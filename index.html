@@ -159,15 +159,11 @@
         try {
             status.innerText = "Connecting to Data...";
             const response = await fetch('all_schools.json');
-            
             if(!response.ok) throw new Error("Data file pending");
-            
             const data = await response.json();
             window.SCHOOL_DATABASE = data.schools; 
-            
             status.innerText = `Ready. Loaded ${data.schools.length.toLocaleString()} UK schools.`;
             footer.innerHTML = `<i class="fa-solid fa-database mr-1"></i> Data updated: <span class="text-slate-300 font-bold">${data.metadata.last_updated}</span>`;
-            
             setTimeout(() => status.innerText = "", 3000);
         } catch (e) {
             console.warn(e);
@@ -262,7 +258,6 @@
 
         const btn = document.getElementById('ai-btn');
         const output = document.getElementById('ai-result');
-        
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing...';
         btn.disabled = true;
@@ -297,10 +292,8 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            
             const data = await response.json();
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "AI analysis unavailable.";
-            
             output.innerHTML = `<span class="text-purple-300 font-bold">AI Analysis:</span> "${text.trim()}"`;
         } catch (e) {
             console.error(e);
@@ -335,20 +328,22 @@
     }
 
     async function getLiveAmenities(lat, lon) {
-        // Updated Query: Includes shop=supermarket/convenience and amenity=fast_food
-        const query = `[out:json];(
-            node["amenity"="pub"](around:1500, ${lat}, ${lon});
-            node["amenity"="cafe"](around:1200, ${lat}, ${lon});
-            node["amenity"="restaurant"](around:1500, ${lat}, ${lon});
-            node["amenity"="fast_food"](around:1500, ${lat}, ${lon});
-            node["shop"="supermarket"](around:2000, ${lat}, ${lon});
-            node["shop"="convenience"](around:1500, ${lat}, ${lon});
-            node["railway"="station"](around:3000, ${lat}, ${lon});
+        // IMPORTANT: Replaced specific nodes with 'nwr' (Node Way Relation) to catch buildings/polygons
+        const query = `[out:json][timeout:25];(
+            nwr["amenity"="pub"](around:1500, ${lat}, ${lon});
+            nwr["amenity"="cafe"](around:1200, ${lat}, ${lon});
+            nwr["amenity"="restaurant"](around:1500, ${lat}, ${lon});
+            nwr["amenity"="fast_food"](around:1500, ${lat}, ${lon});
+            nwr["shop"="supermarket"](around:2500, ${lat}, ${lon});
+            nwr["shop"="convenience"](around:1500, ${lat}, ${lon});
+            nwr["railway"="station"](around:3000, ${lat}, ${lon});
         );out center;`;
+        
         try {
             const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
             const d = await r.json();
             return d.elements.map(el => {
+                // For Ways/Relations, use 'center' lat/lon provided by 'out center'
                 const lat = el.lat || el.center?.lat;
                 const lon = el.lon || el.center?.lon;
                 const tags = el.tags || {};
@@ -358,12 +353,15 @@
                 else if (tags.amenity === 'pub') type = 'PUB';
                 else if (tags.amenity === 'cafe') type = 'CAFE';
                 else if (tags.amenity === 'restaurant') type = 'RESTAURANT';
-                else if (tags.amenity === 'fast_food') type = 'RESTAURANT'; // Map Fast Food to Restaurant
-                else if (tags.shop === 'supermarket' || tags.shop === 'convenience') type = 'SUPERMARKET'; // Map both to Supermarket
+                else if (tags.amenity === 'fast_food') type = 'RESTAURANT';
+                else if (tags.shop === 'supermarket' || tags.shop === 'convenience') type = 'SUPERMARKET';
 
                 return { id: el.id, name: tags.name || "Unnamed", type, lat, lon };
             }).filter(i => i.lat && i.name !== "Unnamed");
-        } catch { return []; }
+        } catch (e) { 
+            console.error("OSM Error:", e);
+            return []; 
+        }
     }
 
     function getNearbySchoolsFromDB(lat, lon) {
