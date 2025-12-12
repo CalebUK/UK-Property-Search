@@ -4,7 +4,7 @@ from scrapfly import ScrapeConfig, ScrapflyClient, ScrapeApiResponse
 
 # 1. SETUP
 # Sign up at scrapfly.io for a free key
-SCRAPFLY_KEY = scp-live-3e4805646e1e4bf7bba2a0fa47c5da73
+SCRAPFLY_KEY = "scp-live-3e4805646e1e4bf7bba2a0fa47c5da73"
 client = ScrapflyClient(key=SCRAPFLY_KEY)
 
 # Search Config (Winnersh/Wokingham area identifier is roughly OUTCODE^2805 or similar)
