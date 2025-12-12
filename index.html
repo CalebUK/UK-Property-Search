@@ -6,24 +6,32 @@
     <title>Live Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
+    <!-- Load Logic Files -->
     <script src="schools.js"></script>
+    <script src="survey.js"></script>
+    
     <style>
         body { margin: 0; overflow: hidden; background: #0f172a; font-family: 'Inter', sans-serif; }
         #map { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; }
         
         .glass-panel {
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
         }
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 24px; height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
@@ -49,9 +57,130 @@
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
+        
+        /* Wizard Animations */
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
+
+<!-- WIZARD OVERLAY -->
+<div id="wizard-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/95 backdrop-blur-sm p-4">
+    <div class="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="bg-slate-900 p-6 border-b border-slate-700 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Your Property Brief</h1>
+                <p class="text-sm text-slate-400">Let's tailor the search for you, Katherine, and the boys.</p>
+            </div>
+            <div class="text-right">
+                <span id="step-counter" class="text-blue-400 font-mono text-sm">1/5</span>
+            </div>
+        </div>
+
+        <div class="p-8 overflow-y-auto flex-1 custom-scrollbar">
+            <!-- STEP 1: BASICS -->
+            <div id="step-1" class="step active space-y-6">
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-house-chimney text-blue-500 mr-2"></i> The Essentials</h2>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">What is the absolute max budget?</label>
+                    <div class="flex items-center bg-slate-700 rounded-lg px-4 border border-slate-600">
+                        <span class="text-slate-400">£</span>
+                        <input type="number" id="in-budget" value="800000" class="bg-transparent w-full py-3 px-2 text-white focus:outline-none" step="10000">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">Minimum Bedrooms?</label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent" data-val="3">3</button>
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-blue-600 text-white border-blue-500 ring-2 ring-blue-400/50" data-val="4">4</button>
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent" data-val="5">5+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 2: EDUCATION -->
+            <div id="step-2" class="step space-y-6">
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Schooling (The Twins)</h2>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">How important is an "Outstanding" Ofsted rating?</label>
+                    <input type="range" id="in-school-weight" min="1" max="10" value="8" class="w-full accent-green-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-xs text-slate-500 mt-1"><span>Nice to have</span><span>Critical</span></div>
+                </div>
+                <div class="bg-slate-700/30 p-4 rounded-lg border border-slate-600">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="in-nursery" class="w-5 h-5 rounded text-blue-600 bg-slate-700 border-slate-500 focus:ring-blue-500" checked>
+                        <div>
+                            <div class="text-white font-medium">Require Nursery / Wrap-around Care?</div>
+                            <div class="text-xs text-slate-400">Filters for schools with nursery classes on site.</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- STEP 3: COMMUTE -->
+            <div id="step-3" class="step space-y-6">
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-train text-purple-500 mr-2"></i> The Commute</h2>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">How often are you going into the office?</label>
+                    <select id="in-commute-freq" class="w-full bg-slate-700 text-white p-3 rounded-lg border border-slate-600 focus:outline-none">
+                        <option value="0">Remote / WFH</option>
+                        <option value="2">Hybrid (1-2 days)</option>
+                        <option value="5" selected>Daily Grind (4-5 days)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">Station Preference?</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-blue-600 text-white text-sm" data-val="walk">Walking Distance (<15min)</button>
+                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-slate-700 text-slate-300 text-sm" data-val="drive">I'll Drive to Station</button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 mt-4">
+                    <input type="checkbox" id="in-airport" class="w-4 h-4 rounded text-blue-600 bg-slate-700">
+                    <label class="text-sm text-slate-300">Need easy access to Heathrow/Gatwick?</label>
+                </div>
+            </div>
+
+            <!-- STEP 4: LIFESTYLE -->
+            <div id="step-4" class="step space-y-6">
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-beer-mug-empty text-yellow-500 mr-2"></i> Weekend Life</h2>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">Saturday Night Vibe?</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600">
+                            <input type="radio" name="social" value="pub" checked class="text-blue-500">
+                            <span class="text-white text-sm">Walk to a local Pub</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600">
+                            <input type="radio" name="social" value="home" class="text-blue-500">
+                            <span class="text-white text-sm">Garden BBQ & Family Time</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">Sunday Morning Coffee?</label>
+                    <input type="range" id="in-coffee" min="0" max="10" value="5" class="w-full accent-orange-500 h-2 bg-slate-700 rounded-lg">
+                </div>
+            </div>
+
+            <!-- STEP 5: FINAL -->
+            <div id="step-5" class="step text-center space-y-6">
+                <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                    <i class="fa-solid fa-check text-3xl text-white"></i>
+                </div>
+                <h2 class="text-2xl text-white font-bold">Ready to Scan</h2>
+                <p class="text-slate-400">I've built your profile. I'll prioritize 4-bed detached homes near Outstanding schools with nursery classes, walkable to the station.</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 p-6 border-t border-slate-700 flex justify-between">
+            <button id="btn-back" onclick="prevStep()" class="text-slate-400 hover:text-white px-4 py-2 hidden">Back</button>
+            <button id="btn-next" onclick="nextStep()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded-lg font-bold transition">Next</button>
+        </div>
+    </div>
+</div>
 
 <!-- SETTINGS BUTTON -->
 <button onclick="toggleSettings()" class="absolute top-6 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600">
@@ -76,7 +205,7 @@
 </div>
 
 <!-- SEARCH UI -->
-<div class="absolute top-6 left-1/2 transform -translate-x-1/2 z-20 w-[90%] max-w-md">
+<div class="absolute top-6 left-1/2 transform -translate-x-1/2 z-20 w-[90%] max-w-md hidden" id="search-bar-container">
     <div class="glass-panel rounded-full p-2 flex items-center shadow-2xl border border-slate-600">
         <div class="pl-4 pr-2 text-slate-400"><i class="fa-solid fa-magnifying-glass"></i></div>
         <input type="text" id="postcode-input" placeholder="Enter Postcode (e.g. RG41 5NY)" 
@@ -87,11 +216,16 @@
             Scan
         </button>
     </div>
-    <div id="status-msg" class="text-center mt-2 text-xs font-medium text-slate-400 h-4 drop-shadow-md">Initializing...</div>
+    <div id="status-msg" class="text-center mt-2 text-xs font-medium text-slate-400 h-4">Initializing...</div>
 </div>
 
+<!-- RESET BUTTON -->
+<button onclick="location.reload()" class="absolute top-20 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600 hidden" id="reset-btn">
+    <i class="fa-solid fa-rotate-right"></i>
+</button>
+
 <!-- RESULTS PANEL -->
-<div class="absolute top-24 left-4 z-10 w-80 flex flex-col gap-3 pointer-events-none transition-opacity duration-500" id="results-panel">
+<div class="absolute top-24 left-4 z-10 w-80 flex flex-col gap-3 pointer-events-none transition-opacity duration-500 opacity-0" id="results-panel">
     <div class="glass-panel rounded-xl p-5 text-white pointer-events-auto border-l-4 border-blue-500">
         <div class="flex justify-between items-center mb-2">
             <div>
@@ -106,21 +240,18 @@
                 <span id="score-text" class="text-xl font-bold">--</span>
             </div>
         </div>
-
+        
         <div class="mb-4">
             <button onclick="generateAIVibe()" id="ai-btn" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-[10px] font-bold py-2 rounded shadow-lg transition flex items-center justify-center gap-2 border border-white/10">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI Vibe Check
             </button>
             <div id="ai-result" class="hidden mt-2 p-3 bg-slate-900/90 rounded text-[10px] leading-relaxed text-indigo-100 italic border border-indigo-500/30 shadow-inner"></div>
         </div>
-        
-        <div class="space-y-1 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar" id="amenities-list">
-            <div class="text-center py-4 text-slate-500 text-xs">Enter a postcode to scan the area...</div>
-        </div>
 
-        <div id="data-footer" class="mt-4 pt-3 border-t border-slate-700 text-[9px] text-slate-500 text-center">
-            Loading data version...
+        <div class="space-y-1 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar" id="amenities-list">
+            <div class="text-center py-4 text-slate-500 text-xs">Scan a postcode to see results.</div>
         </div>
+        <div id="data-footer" class="mt-4 pt-3 border-t border-slate-700 text-[9px] text-slate-500 text-center">Loading data...</div>
     </div>
 </div>
 
@@ -155,7 +286,6 @@
     </div>
 </div>
 
-<!-- MAP CONTAINER (Replaces Canvas) -->
 <div id="map"></div>
 
 <script>
@@ -182,7 +312,6 @@
 
     // --- 2. CONFIG & STATE ---
     let map, markersLayer, linesLayer;
-    const prefs = { schoolWeight: 8, commuteWeight: 6, socialWeight: 5 };
     let searchCenter = { lat: 0, lon: 0 };
     let properties = [];
     let currentPropIndex = 0;
@@ -242,11 +371,9 @@
         markersLayer = L.layerGroup().addTo(map);
         linesLayer = L.layerGroup().addTo(map);
         
-        // Add minimal zoom control bottom right
         L.control.zoom({ position: 'bottomright' }).addTo(map);
     }
 
-    // Call init on load
     window.addEventListener('DOMContentLoaded', () => {
         loadSchoolData();
         initMap();
@@ -284,8 +411,9 @@
         output.innerText = "Consulting Gemini AI...";
 
         const area = document.getElementById('location-label').innerText;
+        const score = document.getElementById('score-text').innerText;
         const topAmenities = amenities.sort((a,b) => a.dist - b.dist).slice(0, 15).map(a => `${a.name} (${a.type})`).join(', ');
-        const prompt = `You are a UK property expert. Analyze this area: ${area}. Amenities nearby: ${topAmenities}. Write a 2-sentence vibe check for a family.`;
+        const prompt = `You are a UK property expert helping Katherine and her twin boys. Area: ${area}. Score: ${score}. Priorities: School (${window.userPrefs.schoolWeight}), Commute (${window.userPrefs.commuteWeight}). Amenities: ${topAmenities}. Write a 2-sentence vibe check.`;
 
         try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -308,7 +436,9 @@
             const lonOffset = (Math.random() - 0.5) * 0.012;
             mockProps.push({
                 id: 100 + i, address: streets[i%streets.length], area: areaName || "Wokingham",
-                price: 550000 + (i*50000), beds: 3 + (i%2), baths: 2, type: "Detached",
+                price: window.userPrefs.budget - (i * 20000), 
+                beds: window.userPrefs.minBeds,
+                baths: 2, type: "Detached",
                 lat: lat + latOffset, lon: lon + lonOffset, 
                 color: colors[i % colors.length]
             });
@@ -365,7 +495,8 @@
         }).filter(s => s !== null);
     }
 
-    async function startSearch() {
+    // Exported function called by wizard
+    window.startSearch = async function() {
         const input = document.getElementById('postcode-input');
         const status = document.getElementById('status-msg');
         if(input.value.length < 5) { status.innerText = "Check postcode"; return; }
@@ -383,10 +514,12 @@
         const schoolData = getNearbySchoolsFromDB(loc.lat, loc.lon);
         
         let nearestAp = null, minD = Infinity;
-        AIRPORTS.forEach(ap => {
-            const d = getDistanceFromLatLonInKm(loc.lat, loc.lon, ap.lat, ap.lon)*1000;
-            if(d < minD) { minD = d; nearestAp = { name: ap.name, type: 'AIRPORT', lat: ap.lat, lon: ap.lon }; }
-        });
+        if(window.userPrefs.airportNeeded) {
+            AIRPORTS.forEach(ap => {
+                const d = getDistanceFromLatLonInKm(loc.lat, loc.lon, ap.lat, ap.lon)*1000;
+                if(d < minD) { minD = d; nearestAp = { name: ap.name, type: 'AIRPORT', lat: ap.lat, lon: ap.lon }; }
+            });
+        }
         
         amenities = [...osmData, ...schoolData];
         if(nearestAp) amenities.push(nearestAp);
@@ -431,9 +564,14 @@
             const conf = TYPES[a.type];
             if(!conf) return;
             let mult = 1;
-            if(a.type.includes('SCHOOL')) mult = prefs.schoolWeight/5;
-            else if(a.type.includes('TRANSPORT') || a.type === 'AIRPORT') mult = prefs.commuteWeight/5;
-            else mult = prefs.socialWeight/5;
+            
+            // DYNAMIC WEIGHTING FROM WIZARD
+            if(a.type.includes('SCHOOL')) mult = window.userPrefs.schoolWeight/5;
+            else if(a.type.includes('TRANSPORT') || a.type === 'AIRPORT') mult = window.userPrefs.commuteWeight/5;
+            else mult = window.userPrefs.socialWeight/5;
+
+            // Boost Coffee Score specifically if requested
+            if(a.type === 'CAFE') mult = window.userPrefs.coffeeWeight/5;
 
             let score = 0;
             if(a.type === 'AIRPORT') {
