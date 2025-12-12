@@ -1,0 +1,32 @@
+name: Refresh Rightmove Data
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Run every morning at 8am
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install Scraper
+        run: pip install scrapfly-sdk parsel jmespath
+
+      - name: Run Scraper
+        env:
+          # This pulls the key from your GitHub Secrets
+          SCRAPFLY_KEY: ${{ secrets.SCRAPFLY_KEY }}
+        run: python fetch_properties.py
+
+      - name: Commit Data
+        run: |
+          git config user.name "EstateAgentBot"
+          git config user.email "actions@github.com"
+          git add properties.json
+          git commit -m "🏡 Daily Property Update" || exit 0
+          git push
