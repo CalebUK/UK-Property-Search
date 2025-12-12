@@ -6,13 +6,13 @@
     <title>Live Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Leaflet Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
-    <!-- Load Logic Files -->
+    <!-- Load Schools Logic (Assuming this file exists, otherwise fallback to cache) -->
     <script src="schools.js"></script>
-    <script src="survey.js"></script>
-    
+
     <style>
         body { margin: 0; overflow: hidden; background: #0f172a; font-family: 'Inter', sans-serif; }
         #map { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; }
@@ -23,6 +23,22 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
         }
+        
+        /* Wizard Specifics */
+        #wizard-overlay { z-index: 9999; } /* Force on top of map */
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+        .accordion-content { transition: max-height 0.3s ease-out; overflow: hidden; max-height: 0; }
+        .accordion-content.open { max-height: 500px; overflow-y: auto; }
+        .rotate-180 { transform: rotate(180deg); }
+
         .loading-spinner {
             border: 4px solid rgba(255, 255, 255, 0.1);
             border-left-color: #3b82f6;
@@ -31,14 +47,6 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-        .accordion-content { transition: max-height 0.3s ease-out; overflow: hidden; max-height: 0; }
-        .accordion-content.open { max-height: 500px; overflow-y: auto; }
-        .rotate-180 { transform: rotate(180deg); }
 
         /* Map Markers */
         .custom-pin {
@@ -57,22 +65,17 @@
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
-        
-        /* Wizard Animations */
-        .step { display: none; }
-        .step.active { display: block; animation: fadeIn 0.5s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <!-- WIZARD OVERLAY -->
-<div id="wizard-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/95 backdrop-blur-sm p-4">
+<div id="wizard-overlay" class="fixed inset-0 flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4">
     <div class="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div class="bg-slate-900 p-6 border-b border-slate-700 flex justify-between items-center">
             <div>
-                <h1 class="text-2xl font-bold text-white">Your Property Brief</h1>
-                <p class="text-sm text-slate-400">Let's tailor the search for you, Katherine, and the boys.</p>
+                <h1 class="text-2xl font-bold text-white">Property Brief</h1>
+                <p class="text-sm text-slate-400">Tailoring the search for Katherine & the twins.</p>
             </div>
             <div class="text-right">
                 <span id="step-counter" class="text-blue-400 font-mono text-sm">1/5</span>
@@ -84,7 +87,7 @@
             <div id="step-1" class="step active space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-house-chimney text-blue-500 mr-2"></i> The Essentials</h2>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">What is the absolute max budget?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Max Budget?</label>
                     <div class="flex items-center bg-slate-700 rounded-lg px-4 border border-slate-600">
                         <span class="text-slate-400">£</span>
                         <input type="number" id="in-budget" value="800000" class="bg-transparent w-full py-3 px-2 text-white focus:outline-none" step="10000">
@@ -92,19 +95,19 @@
                 </div>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Minimum Bedrooms?</label>
-                    <div class="grid grid-cols-4 gap-2">
-                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent" data-val="3">3</button>
-                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-blue-600 text-white border-blue-500 ring-2 ring-blue-400/50" data-val="4">4</button>
-                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-transparent" data-val="5">5+</button>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600" data-val="3">3 Beds</button>
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-blue-600 text-white border-blue-500 ring-2 ring-blue-400/50" data-val="4">4 Beds</button>
+                        <button onclick="selectBtn(this, 'beds')" class="btn-opt p-3 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600" data-val="5">5+ Beds</button>
                     </div>
                 </div>
             </div>
 
             <!-- STEP 2: EDUCATION -->
             <div id="step-2" class="step space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Schooling (The Twins)</h2>
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Schooling</h2>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">How important is an "Outstanding" Ofsted rating?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Importance of "Outstanding" Ofsted?</label>
                     <input type="range" id="in-school-weight" min="1" max="10" value="8" class="w-full accent-green-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
                     <div class="flex justify-between text-xs text-slate-500 mt-1"><span>Nice to have</span><span>Critical</span></div>
                 </div>
@@ -112,8 +115,8 @@
                     <label class="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" id="in-nursery" class="w-5 h-5 rounded text-blue-600 bg-slate-700 border-slate-500 focus:ring-blue-500" checked>
                         <div>
-                            <div class="text-white font-medium">Require Nursery / Wrap-around Care?</div>
-                            <div class="text-xs text-slate-400">Filters for schools with nursery classes on site.</div>
+                            <div class="text-white font-medium">Require Nursery / Wrap-around?</div>
+                            <div class="text-xs text-slate-400">Prioritizes schools with nursery classes.</div>
                         </div>
                     </label>
                 </div>
@@ -123,61 +126,61 @@
             <div id="step-3" class="step space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-train text-purple-500 mr-2"></i> The Commute</h2>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">How often are you going into the office?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Days in Office?</label>
                     <select id="in-commute-freq" class="w-full bg-slate-700 text-white p-3 rounded-lg border border-slate-600 focus:outline-none">
                         <option value="0">Remote / WFH</option>
                         <option value="2">Hybrid (1-2 days)</option>
-                        <option value="5" selected>Daily Grind (4-5 days)</option>
+                        <option value="5" selected>Daily (4-5 days)</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">Station Preference?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Transport Mode?</label>
                     <div class="grid grid-cols-2 gap-3">
-                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-blue-600 text-white text-sm" data-val="walk">Walking Distance (<15min)</button>
-                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-slate-700 text-slate-300 text-sm" data-val="drive">I'll Drive to Station</button>
+                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-blue-600 text-white text-sm" data-val="walk">Walking Distance</button>
+                        <button onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-slate-700 text-slate-300 text-sm" data-val="drive">Driving to Station</button>
                     </div>
                 </div>
                 <div class="flex items-center gap-3 mt-4">
                     <input type="checkbox" id="in-airport" class="w-4 h-4 rounded text-blue-600 bg-slate-700">
-                    <label class="text-sm text-slate-300">Need easy access to Heathrow/Gatwick?</label>
+                    <label class="text-sm text-slate-300">Fast Airport Access?</label>
                 </div>
             </div>
 
             <!-- STEP 4: LIFESTYLE -->
             <div id="step-4" class="step space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-beer-mug-empty text-yellow-500 mr-2"></i> Weekend Life</h2>
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-beer-mug-empty text-yellow-500 mr-2"></i> Lifestyle</h2>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">Saturday Night Vibe?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Weekend Vibe?</label>
                     <div class="space-y-2">
-                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600">
-                            <input type="radio" name="social" value="pub" checked class="text-blue-500">
-                            <span class="text-white text-sm">Walk to a local Pub</span>
+                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 border border-transparent hover:border-slate-500 transition">
+                            <input type="radio" name="social" value="pub" checked class="accent-blue-500 w-4 h-4">
+                            <span class="text-white text-sm">Pub Lunch / Socializing</span>
                         </label>
-                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600">
-                            <input type="radio" name="social" value="home" class="text-blue-500">
-                            <span class="text-white text-sm">Garden BBQ & Family Time</span>
+                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 border border-transparent hover:border-slate-500 transition">
+                            <input type="radio" name="social" value="home" class="accent-blue-500 w-4 h-4">
+                            <span class="text-white text-sm">Quiet Home / Garden</span>
                         </label>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">Sunday Morning Coffee?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Coffee Priority?</label>
                     <input type="range" id="in-coffee" min="0" max="10" value="5" class="w-full accent-orange-500 h-2 bg-slate-700 rounded-lg">
                 </div>
             </div>
 
-            <!-- STEP 5: FINAL -->
+            <!-- STEP 5: READY -->
             <div id="step-5" class="step text-center space-y-6">
                 <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                     <i class="fa-solid fa-check text-3xl text-white"></i>
                 </div>
-                <h2 class="text-2xl text-white font-bold">Ready to Scan</h2>
-                <p class="text-slate-400">I've built your profile. I'll prioritize 4-bed detached homes near Outstanding schools with nursery classes, walkable to the station.</p>
+                <h2 class="text-2xl text-white font-bold">Profile Complete</h2>
+                <p class="text-slate-400">The scanner is calibrated. Let's find some properties in Winnersh.</p>
             </div>
         </div>
 
         <div class="bg-slate-900 p-6 border-t border-slate-700 flex justify-between">
             <button id="btn-back" onclick="prevStep()" class="text-slate-400 hover:text-white px-4 py-2 hidden">Back</button>
-            <button id="btn-next" onclick="nextStep()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded-lg font-bold transition">Next</button>
+            <button id="btn-next" onclick="nextStep()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-900/50">Next</button>
         </div>
     </div>
 </div>
@@ -190,16 +193,14 @@
 <!-- SETTINGS MODAL -->
 <div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
     <div class="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-700">
-        <h2 class="text-xl font-bold text-white mb-4">App Settings</h2>
+        <h2 class="text-xl font-bold text-white mb-4">Settings</h2>
         <div class="mb-4">
             <label class="block text-xs text-slate-400 mb-1">Gemini API Key</label>
-            <input type="password" id="api-key-input" placeholder="Paste your API key here" 
-                   class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-sm">
-            <p class="text-[10px] text-slate-500 mt-1">Stored locally in your browser for the AI Vibe Check.</p>
+            <input type="password" id="api-key-input" placeholder="Paste API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
         </div>
         <div class="flex justify-end gap-2">
             <button onclick="toggleSettings()" class="px-4 py-2 text-slate-300 text-sm hover:text-white">Cancel</button>
-            <button onclick="saveSettings()" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-4 py-2 text-sm font-bold transition">Save</button>
+            <button onclick="saveSettings()" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-4 py-2 text-sm font-bold">Save</button>
         </div>
     </div>
 </div>
@@ -289,28 +290,97 @@
 <div id="map"></div>
 
 <script>
-    // --- 1. DATA LOADING ---
-    async function loadSchoolData() {
-        const status = document.getElementById('status-msg');
-        const footer = document.getElementById('data-footer');
-        try {
-            status.innerText = "Connecting to Data...";
-            const response = await fetch('all_schools.json');
-            if(!response.ok) throw new Error("Data file pending");
-            const data = await response.json();
-            window.SCHOOL_DATABASE = data.schools; 
-            status.innerText = `Ready. Loaded ${data.schools.length.toLocaleString()} UK schools.`;
-            footer.innerHTML = `<i class="fa-solid fa-database mr-1"></i> Data updated: <span class="text-slate-300 font-bold">${data.metadata.last_updated}</span>`;
-            setTimeout(() => status.innerText = "", 3000);
-        } catch (e) {
-            console.warn(e);
-            status.innerText = "Using Offline Cache (Gov Data Pending)";
-            window.SCHOOL_DATABASE = OFSTED_CACHE; 
-            footer.innerText = "Using Offline Data Mode";
+    // --- GLOBAL USER PREFS ---
+    window.userPrefs = {
+        budget: 800000,
+        minBeds: 4,
+        schoolWeight: 8,
+        nurseryNeeded: true,
+        commuteWeight: 5,
+        transportRange: 2000,
+        airportNeeded: false,
+        socialWeight: 5,
+        coffeeWeight: 5
+    };
+
+    // --- WIZARD LOGIC ---
+    let currentStep = 1;
+    const totalSteps = 5;
+
+    function selectBtn(btn, group) {
+        document.querySelectorAll(`.btn-opt[onclick*="${group}"], .btn-opt-station[onclick*="${group}"]`).forEach(b => {
+            b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
+            b.classList.add('bg-slate-700', 'text-slate-300');
+        });
+        btn.classList.remove('bg-slate-700', 'text-slate-300');
+        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
+        
+        if (group === 'beds') window.userPrefs.minBeds = parseInt(btn.getAttribute('data-val'));
+        if (group === 'station') {
+            const val = btn.getAttribute('data-val');
+            window.userPrefs.transportRange = (val === 'drive') ? 4000 : 1500;
         }
     }
 
-    // --- 2. CONFIG & STATE ---
+    function nextStep() {
+        if (currentStep === 1) {
+            window.userPrefs.budget = parseInt(document.getElementById('in-budget').value) || 800000;
+        } else if (currentStep === 2) {
+            window.userPrefs.schoolWeight = parseInt(document.getElementById('in-school-weight').value);
+            window.userPrefs.nurseryNeeded = document.getElementById('in-nursery').checked;
+        } else if (currentStep === 3) {
+            const freq = document.getElementById('in-commute-freq').value;
+            window.userPrefs.commuteWeight = freq == 0 ? 1 : (freq >= 4 ? 9 : 5);
+            window.userPrefs.airportNeeded = document.getElementById('in-airport').checked;
+        } else if (currentStep === 4) {
+            window.userPrefs.coffeeWeight = parseInt(document.getElementById('in-coffee').value);
+            // Social weight derived from selection implicitly or default 5
+        }
+
+        if(currentStep === totalSteps) {
+            finishWizard();
+            return;
+        }
+
+        document.getElementById(`step-${currentStep}`).classList.remove('active');
+        currentStep++;
+        document.getElementById(`step-${currentStep}`).classList.add('active');
+        updateWizardUI();
+    }
+
+    function prevStep() {
+        document.getElementById(`step-${currentStep}`).classList.remove('active');
+        currentStep--;
+        document.getElementById(`step-${currentStep}`).classList.add('active');
+        updateWizardUI();
+    }
+
+    function updateWizardUI() {
+        document.getElementById('step-counter').innerText = `${currentStep}/${totalSteps}`;
+        const backBtn = document.getElementById('btn-back');
+        const nextBtn = document.getElementById('btn-next');
+        
+        if (currentStep === 1) backBtn.classList.add('hidden');
+        else backBtn.classList.remove('hidden');
+        
+        if (currentStep === totalSteps) nextBtn.innerText = "Find My Home";
+        else nextBtn.innerText = "Next";
+    }
+
+    function finishWizard() {
+        const overlay = document.getElementById('wizard-overlay');
+        overlay.style.transition = 'opacity 0.5s';
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            document.getElementById('search-bar-container').classList.remove('hidden');
+            document.getElementById('reset-btn').classList.remove('hidden');
+            document.getElementById('results-panel').classList.remove('opacity-0');
+            startSearch(); 
+        }, 500);
+    }
+
+    // --- MAIN APP ---
     let map, markersLayer, linesLayer;
     let searchCenter = { lat: 0, lon: 0 };
     let properties = [];
@@ -355,14 +425,33 @@
         { key: "winnersh primary", name: "Winnersh Primary", rating: "Good", type: "Primary", date: "18 May 2022", nursery: true }
     ];
 
+    async function loadSchoolData() {
+        const status = document.getElementById('status-msg');
+        const footer = document.getElementById('data-footer');
+        try {
+            status.innerText = "Connecting to Data...";
+            const response = await fetch('all_schools.json');
+            if(!response.ok) throw new Error("Data file pending");
+            const data = await response.json();
+            window.SCHOOL_DATABASE = data.schools; 
+            status.innerText = `Ready. Loaded ${data.schools.length.toLocaleString()} UK schools.`;
+            footer.innerHTML = `<i class="fa-solid fa-database mr-1"></i> Data updated: <span class="text-slate-300 font-bold">${data.metadata.last_updated}</span>`;
+            setTimeout(() => status.innerText = "", 3000);
+        } catch (e) {
+            console.warn(e);
+            status.innerText = "Using Offline Cache (Gov Data Pending)";
+            window.SCHOOL_DATABASE = OFSTED_CACHE; 
+            footer.innerText = "Using Offline Data Mode";
+        }
+    }
+
     function initMap() {
         map = L.map('map', { 
             zoomControl: false, 
             attributionControl: false,
             zoomAnimation: true 
-        }).setView([51.41, -0.85], 14); // Default Wokingham
+        }).setView([51.41, -0.85], 14); 
 
-        // Dark Matter Tiles
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             subdomains: 'abcd'
@@ -370,7 +459,6 @@
 
         markersLayer = L.layerGroup().addTo(map);
         linesLayer = L.layerGroup().addTo(map);
-        
         L.control.zoom({ position: 'bottomright' }).addTo(map);
     }
 
@@ -495,8 +583,7 @@
         }).filter(s => s !== null);
     }
 
-    // Exported function called by wizard
-    window.startSearch = async function() {
+    async function startSearch() {
         const input = document.getElementById('postcode-input');
         const status = document.getElementById('status-msg');
         if(input.value.length < 5) { status.innerText = "Check postcode"; return; }
@@ -551,6 +638,41 @@
     function prevProperty() { loadProperty(currentPropIndex - 1); }
     function nextProperty() { loadProperty(currentPropIndex + 1); }
 
+    function updateMapVisuals(prop) {
+        if(!map) return;
+        map.flyTo([prop.lat, prop.lon], 15, { animate: true, duration: 1.5 });
+        markersLayer.clearLayers();
+        linesLayer.clearLayers();
+
+        const houseIcon = L.divIcon({
+            className: 'house-marker-wrapper',
+            html: `<div class="house-pin w-4 h-4 rounded-full"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+        L.marker([prop.lat, prop.lon], { icon: houseIcon }).addTo(markersLayer);
+
+        amenities.forEach(a => {
+            if(a.type === 'AIRPORT' || a.dist > 3000) return;
+            const conf = TYPES[a.type] || {color:'#64748b', icon:'circle'};
+            
+            const amenityIcon = L.divIcon({
+                className: 'custom-icon-wrapper',
+                html: `<div class="custom-pin w-6 h-6 bg-slate-900/80" style="color: ${conf.color}; border-color: ${conf.color}"><i class="fa-solid fa-${conf.icon} text-[10px]"></i></div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            const marker = L.marker([a.lat, a.lon], { icon: amenityIcon }).bindPopup(`<b>${a.name}</b><br>${Math.round(a.dist)}m`);
+            marker.addTo(markersLayer);
+
+            if(a.score > 0) {
+                L.polyline([[prop.lat, prop.lon], [a.lat, a.lon]], {
+                    color: conf.color, weight: 1, opacity: 0.3, dashArray: '5, 5'
+                }).addTo(linesLayer);
+            }
+        });
+    }
+
     function toggleDetails(id) { document.getElementById(id).classList.toggle('hidden'); }
     function toggleCategory(id) { 
         document.getElementById(id).classList.toggle('open'); 
@@ -565,12 +687,10 @@
             if(!conf) return;
             let mult = 1;
             
-            // DYNAMIC WEIGHTING FROM WIZARD
             if(a.type.includes('SCHOOL')) mult = window.userPrefs.schoolWeight/5;
             else if(a.type.includes('TRANSPORT') || a.type === 'AIRPORT') mult = window.userPrefs.commuteWeight/5;
             else mult = window.userPrefs.socialWeight/5;
 
-            // Boost Coffee Score specifically if requested
             if(a.type === 'CAFE') mult = window.userPrefs.coffeeWeight/5;
 
             let score = 0;
@@ -645,54 +765,6 @@
         const R = 6371; const dLat = (lat2-lat1)*Math.PI/180; const dLon = (lon2-lon1)*Math.PI/180;
         const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    function updateMapVisuals(prop) {
-        if(!map) return;
-        
-        // 1. Center Map on House
-        map.flyTo([prop.lat, prop.lon], 15, { animate: true, duration: 1.5 });
-        
-        // 2. Clear old layers
-        markersLayer.clearLayers();
-        linesLayer.clearLayers();
-
-        // 3. Add House Marker (Pulse Effect)
-        const houseIcon = L.divIcon({
-            className: 'house-marker-wrapper',
-            html: `<div class="house-pin w-4 h-4 rounded-full"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 8]
-        });
-        L.marker([prop.lat, prop.lon], { icon: houseIcon }).addTo(markersLayer);
-
-        // 4. Add Amenities
-        amenities.forEach(a => {
-            if(a.type === 'AIRPORT' || a.dist > 3000) return; // Don't plot distant airports
-            
-            const conf = TYPES[a.type] || {color:'#64748b', icon:'circle'};
-            
-            // Marker
-            const amenityIcon = L.divIcon({
-                className: 'custom-icon-wrapper',
-                html: `<div class="custom-pin w-6 h-6 bg-slate-900/80" style="color: ${conf.color}; border-color: ${conf.color}"><i class="fa-solid fa-${conf.icon} text-[10px]"></i></div>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-            
-            const marker = L.marker([a.lat, a.lon], { icon: amenityIcon }).bindPopup(`<b>${a.name}</b><br>${Math.round(a.dist)}m`);
-            marker.addTo(markersLayer);
-
-            // Line (Only if it contributes score)
-            if(a.score > 0) {
-                L.polyline([[prop.lat, prop.lon], [a.lat, a.lon]], {
-                    color: conf.color,
-                    weight: 1,
-                    opacity: 0.3,
-                    dashArray: '5, 5'
-                }).addTo(linesLayer);
-            }
-        });
     }
 </script>
 </body>
