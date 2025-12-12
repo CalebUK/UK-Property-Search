@@ -4,6 +4,7 @@ import io
 import json
 import math
 import re
+import time
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -18,7 +19,8 @@ def get_gias_data():
     print(f"🌍 [1/4] Downloading GIAS Data (Locations)...")
     
     try:
-        r = requests.get(url)
+        # Added timeout to prevent hanging
+        r = requests.get(url, timeout=60)
         r.raise_for_status()
         # Read into Pandas DataFrame
         df = pd.read_csv(io.StringIO(r.content.decode('ISO-8859-1')), low_memory=False)
@@ -32,7 +34,7 @@ def get_ofsted_data():
     print(f"🕵️ [2/4] Hunting for latest Ofsted Inspection Data...")
     
     try:
-        page = requests.get(OFSTED_PAGE_URL)
+        page = requests.get(OFSTED_PAGE_URL, timeout=30)
         soup = BeautifulSoup(page.content, 'html.parser')
         
         # Find the link to the CSV/Excel
@@ -48,7 +50,7 @@ def get_ofsted_data():
             
         print(f"   👉 Found latest dataset: {file_url}")
         
-        r = requests.get(file_url)
+        r = requests.get(file_url, timeout=120) # Larger timeout for big file
         # Using 'on_bad_lines' to skip malformed rows if any
         df = pd.read_csv(io.StringIO(r.content.decode('ISO-8859-1')), low_memory=False, on_bad_lines='skip')
         return df
@@ -72,22 +74,88 @@ def find_col(df, candidates):
                 return col
     return None
 
+# --- COORDINATE CONVERSION (Optimized) ---
+def OSGB36toWGS84(E, N):
+    # Check for invalid inputs that cause infinite loops
+    if E == 0 or N == 0 or pd.isna(E) or pd.isna(N):
+        return 0, 0
+
+    a, b = 6377563.396, 6356256.909
+    F0 = 0.9996012717
+    lat0 = 49 * math.pi / 180
+    lon0 = -2 * math.pi / 180
+    N0, E0 = -100000, 400000
+    e2 = 1 - (b * b) / (a * a)
+    n = (a - b) / (a + b)
+    n2, n3 = n * n, n * n * n
+    lat = lat0
+    M = 0
+    
+    # SAFETY BRAKE: Max iterations to prevent infinite hanging
+    max_iter = 50
+    iteration = 0
+    
+    while iteration < max_iter:
+        lat_old = lat
+        lat = (N - N0 - M) / (a * F0) + lat
+        Ma = (1 + n + (5 / 4) * n2 + (5 / 4) * n3) * (lat - lat0)
+        Mb = (3 * n + 3 * n2 + (21 / 8) * n3) * math.sin(lat - lat0) * math.cos(lat + lat0)
+        Mc = ((15 / 8) * n2 + (15 / 8) * n3) * math.sin(2 * (lat - lat0)) * math.cos(2 * (lat + lat0))
+        Md = (35 / 24) * n3 * math.sin(3 * (lat - lat0)) * math.cos(3 * (lat + lat0))
+        M = b * F0 * (Ma - Mb + Mc - Md)
+        
+        if abs(N - N0 - M) < 0.00001: 
+            break
+        iteration += 1
+
+    cosLat, sinLat = math.cos(lat), math.sin(lat)
+    nu = a * F0 / math.sqrt(1 - e2 * sinLat * sinLat)
+    rho = a * F0 * (1 - e2) / math.pow(1 - e2 * sinLat * sinLat, 1.5)
+    eta2 = nu / rho - 1
+    tanLat = math.tan(lat)
+    dE = (E - E0)
+    dE2, dE3, dE4, dE5, dE6, dE7 = dE**2, dE**3, dE**4, dE**5, dE**6, dE**7
+    
+    VII = tanLat / (2 * rho * nu)
+    VIII = tanLat / (24 * rho * nu**3) * (5 + 3 * tanLat**2 + eta2 - 9 * tanLat**2 * eta2)
+    IX = tanLat / (720 * rho * nu**5) * (61 + 90 * tanLat**2 + 45 * tanLat**4)
+    lat = lat - VII * dE2 + VIII * dE4 - IX * dE6
+    
+    secLat = 1/cosLat
+    X = secLat / nu
+    XI = secLat / (6 * nu**3) * (nu / rho + 2 * tanLat**2)
+    XII = secLat / (120 * nu**5) * (5 + 28 * tanLat**2 + 24 * tanLat**4)
+    XIIA = secLat / (5040 * nu**7) * (61 + 662 * tanLat**2 + 1320 * tanLat**4 + 720 * tanLat**6)
+    lon = lon0 + X * dE - XI * dE3 + XII * dE5 - XIIA * dE7
+    
+    return math.degrees(lat), math.degrees(lon)
+
+def convert_coords(E, N):
+    try:
+        return OSGB36toWGS84(float(E), float(N))
+    except:
+        return 0, 0
+
 def process_data():
+    start_time = time.time()
+    
     # 1. GET DATASETS
     schools_df = get_gias_data()
     ofsted_df = get_ofsted_data()
 
     if schools_df is None:
+        print("❌ Critical: Could not download base school data.")
         return
 
     print("⚗️  [3/4] Merging Datasets...")
 
     # 2. PREPARE SCHOOLS (GIAS)
+    # Filter Open schools
     schools_df = schools_df[schools_df['EstablishmentStatus (name)'].str.contains('Open', na=False)]
+    print(f"   - Processing {len(schools_df)} open schools...")
     
     # 3. PREPARE RATINGS (OFSTED)
     if ofsted_df is not None:
-        # Find the correct column names dynamically
         urn_col = find_col(ofsted_df, ['URN'])
         rating_col = find_col(ofsted_df, ['Overall effectiveness', 'Overall effectiveness (rating)', 'Overall'])
         date_col = find_col(ofsted_df, ['Inspection end date', 'Inspection date', 'Inspection start date', 'Publication date'])
@@ -95,22 +163,20 @@ def process_data():
         print(f"   🔎 Mapped Ofsted Columns: URN='{urn_col}', Rating='{rating_col}', Date='{date_col}'")
 
         if urn_col and rating_col:
-            # Select and Rename
             cols_to_keep = [urn_col, rating_col]
             if date_col: cols_to_keep.append(date_col)
             
             ofsted_subset = ofsted_df[cols_to_keep].copy()
-            
-            # Rename standard columns for merging
             rename_map = {urn_col: 'URN', rating_col: 'rating_code'}
             if date_col: rename_map[date_col] = 'inspection_date'
             
             ofsted_subset.rename(columns=rename_map, inplace=True)
+            # Ensure URN is same type
+            schools_df['URN'] = schools_df['URN'].astype(str)
+            ofsted_subset['URN'] = ofsted_subset['URN'].astype(str)
             
-            # Merge
             merged = pd.merge(schools_df, ofsted_subset, on='URN', how='left')
         else:
-            print("   ⚠️ Could not find critical Ofsted columns. Skipping ratings.")
             merged = schools_df
             merged['rating_code'] = None
             merged['inspection_date'] = None
@@ -119,74 +185,32 @@ def process_data():
         merged['rating_code'] = None
         merged['inspection_date'] = None
 
-    # 4. FINAL CLEANUP
+    # 4. FINAL CLEANUP & EXPORT
+    print("💾 [4/4] Generating JSON (Fast Mode)...")
     final_list = []
+
+    # Optimization: Convert to list of dicts first to avoid slow DataFrame iteration
+    records = merged.to_dict('records')
     
-    print("💾 [4/4] Generating JSON...")
-
-    # Re-define math conversion here for scope access
-    def OSGB36toWGS84(E, N):
-        a, b = 6377563.396, 6356256.909
-        F0 = 0.9996012717
-        lat0 = 49 * math.pi / 180
-        lon0 = -2 * math.pi / 180
-        N0, E0 = -100000, 400000
-        e2 = 1 - (b * b) / (a * a)
-        n = (a - b) / (a + b)
-        n2, n3 = n * n, n * n * n
-        lat = lat0
-        M = 0
-        while True:
-            lat = (N - N0 - M) / (a * F0) + lat
-            Ma = (1 + n + (5 / 4) * n2 + (5 / 4) * n3) * (lat - lat0)
-            Mb = (3 * n + 3 * n2 + (21 / 8) * n3) * math.sin(lat - lat0) * math.cos(lat + lat0)
-            Mc = ((15 / 8) * n2 + (15 / 8) * n3) * math.sin(2 * (lat - lat0)) * math.cos(2 * (lat + lat0))
-            Md = (35 / 24) * n3 * math.sin(3 * (lat - lat0)) * math.cos(3 * (lat + lat0))
-            M = b * F0 * (Ma - Mb + Mc - Md)
-            if N - N0 - M < 0.00001: break
-        cosLat, sinLat = math.cos(lat), math.sin(lat)
-        nu = a * F0 / math.sqrt(1 - e2 * sinLat * sinLat)
-        rho = a * F0 * (1 - e2) / math.pow(1 - e2 * sinLat * sinLat, 1.5)
-        eta2 = nu / rho - 1
-        tanLat = math.tan(lat)
-        dE = (E - E0)
-        dE2, dE3, dE4, dE5, dE6, dE7 = dE**2, dE**3, dE**4, dE**5, dE**6, dE**7
-        # Simplified lat calculation for brevity in loop context, assuming valid E/N
-        VII = tanLat / (2 * rho * nu)
-        VIII = tanLat / (24 * rho * nu**3) * (5 + 3 * tanLat**2 + eta2 - 9 * tanLat**2 * eta2)
-        IX = tanLat / (720 * rho * nu**5) * (61 + 90 * tanLat**2 + 45 * tanLat**4)
-        lat = lat - VII * dE2 + VIII * dE4 - IX * dE6
-        
-        # Simplified lon
-        secLat = 1/cosLat
-        X = secLat / nu
-        XI = secLat / (6 * nu**3) * (nu / rho + 2 * tanLat**2)
-        XII = secLat / (120 * nu**5) * (5 + 28 * tanLat**2 + 24 * tanLat**4)
-        XIIA = secLat / (5040 * nu**7) * (61 + 662 * tanLat**2 + 1320 * tanLat**4 + 720 * tanLat**6)
-        lon = lon0 + X * dE - XI * dE3 + XII * dE5 - XIIA * dE7
-        
-        return math.degrees(lat), math.degrees(lon)
-
-    def convert_coords(E, N):
-        try:
-            return OSGB36toWGS84(float(E), float(N))
-        except:
-            return None, None
-
-    for index, row in merged.iterrows():
-        # Location
+    for row in records:
+        # Location logic
         lat, lon = row.get('Latitude'), row.get('Longitude')
         
-        # If Lat/Lon missing, convert from Grid
-        if pd.isna(lat) or pd.isna(lon):
-            lat, lon = convert_coords(row.get('Easting'), row.get('Northing'))
+        # If Lat/Lon missing or 0, try converting Easting/Northing
+        if not lat or not lon or math.isnan(float(lat)):
+            e, n = row.get('Easting'), row.get('Northing')
+            if e and n:
+                lat, lon = convert_coords(e, n)
+            else:
+                continue # Skip if absolutely no location data
         
-        if not lat or not lon: continue
+        # Check again if conversion failed or returned 0
+        if not lat or not lon or (lat == 0 and lon == 0):
+            continue
 
-        # Rating Map (Ofsted codes are usually 1,2,3,4)
+        # Rating Map
         r_code = str(row.get('rating_code', ''))
-        # Normalize code (remove decimals if pandas made it a float)
-        if r_code.endswith('.0'): r_code = r_code[:-2]
+        if r_code.endswith('.0'): r_code = r_code[:-2] # Handle "1.0"
         
         rating = "Unknown"
         if r_code == '1': rating = "Outstanding"
@@ -194,23 +218,23 @@ def process_data():
         elif r_code == '3': rating = "Requires Improvement"
         elif r_code == '4': rating = "Inadequate"
 
-        # Name Clean
+        # Name Cleaning
         name = str(row.get('EstablishmentName'))
         if name.startswith("The "): name = name[4:]
         if name.endswith(" Academy"): name = name[:-8]
 
-        # Nursery
+        # Nursery Check
         nursery_col = row.get('NurseryProvision (name)', '')
         has_nursery = "has nursery" in str(nursery_col).lower() or "classes" in str(nursery_col).lower()
 
         final_list.append({
             "name": name,
             "rating": rating,
-            "type": row.get('PhaseOfEducation (name)', 'School'),
+            "type": str(row.get('PhaseOfEducation (name)', 'School')),
             "date": str(row.get('inspection_date', 'N/A')),
             "nursery": has_nursery,
-            "lat": round(lat, 6),
-            "lon": round(lon, 6)
+            "lat": round(float(lat), 6),
+            "lon": round(float(lon), 6)
         })
 
     # Save
@@ -225,7 +249,9 @@ def process_data():
     with open('all_schools.json', 'w') as f:
         json.dump(output, f)
         
-    print(f"✅ DONE! Saved {len(final_list)} schools to 'all_schools.json'")
+    elapsed = time.time() - start_time
+    print(f"✅ DONE! Processed in {elapsed:.2f} seconds.")
+    print(f"📊 Saved {len(final_list)} schools to 'all_schools.json'")
 
 if __name__ == "__main__":
     process_data()
