@@ -216,36 +216,62 @@
     }
 
     window.nextStep = function() {
-        // Capture Data
-        if (currentStep === 1) {
-            const loc = document.getElementById('in-location').value;
-            if(loc) window.userPrefs.location = loc;
-        }
-        else if (currentStep === 2) {
-            window.userPrefs.budget = parseInt(document.getElementById('in-budget').value) || 800000;
-        }
-        else if (currentStep === 3) {
-            window.userPrefs.schoolWeight = parseInt(document.getElementById('in-school-weight').value);
-            window.userPrefs.nurseryNeeded = document.getElementById('in-nursery').checked;
-        }
-        else if (currentStep === 4) {
-            const freq = document.getElementById('in-commute-freq').value;
-            window.userPrefs.commuteWeight = freq == 0 ? 1 : (freq >= 4 ? 9 : 5);
-            window.userPrefs.airportNeeded = document.getElementById('in-airport').checked;
-        }
+    // Helper to safely get value
+    const getVal = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.value : null;
+    };
+    const getChecked = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.checked : false;
+    };
 
-        if(currentStep === totalSteps) { finishWizard(); return; }
+    // Capture Data
+    if (currentStep === 1) {
+        const loc = getVal('in-location');
+        if(loc) window.userPrefs.location = loc;
+    }
+    else if (currentStep === 2) {
+        const budget = getVal('in-budget');
+        if(budget) window.userPrefs.budget = parseInt(budget);
+    }
+    else if (currentStep === 3) {
+        const weight = getVal('in-school-weight');
+        if(weight) window.userPrefs.schoolWeight = parseInt(weight);
+        window.userPrefs.nurseryNeeded = getChecked('in-nursery');
+    }
+    else if (currentStep === 4) {
+        const freq = getVal('in-commute-freq');
+        if(freq) {
+            const val = parseInt(freq);
+            window.userPrefs.commuteWeight = val === 0 ? 1 : (val >= 4 ? 9 : 5);
+        }
+        window.userPrefs.airportNeeded = getChecked('in-airport');
+    }
 
-        document.getElementById(`step-${currentStep}`).classList.remove('active');
+    if(currentStep === totalSteps) { finishWizard(); return; }
+
+    // Visual transition
+    const currEl = document.getElementById(`step-${currentStep}`);
+    const nextEl = document.getElementById(`step-${currentStep+1}`);
+
+    if (currEl && nextEl) {
+        currEl.classList.remove('active');
         currentStep++;
-        document.getElementById(`step-${currentStep}`).classList.add('active');
-        document.getElementById('step-counter').innerText = `${currentStep}/${totalSteps}`;
+        nextEl.classList.add('active');
+        
+        // Update Counter
+        const counter = document.getElementById('step-counter');
+        if(counter) counter.innerText = `${currentStep}/${totalSteps}`;
         
         const backBtn = document.getElementById('btn-back');
         const nextBtn = document.getElementById('btn-next');
-        if (currentStep > 1) backBtn.classList.remove('hidden');
-        if (currentStep === totalSteps) nextBtn.innerText = "Start Live Scan";
+        if (backBtn && currentStep > 1) backBtn.classList.remove('hidden');
+        if (nextBtn && currentStep === totalSteps) nextBtn.innerText = "Start Live Scan";
+    } else {
+        console.error("Missing step HTML element for step:", currentStep);
     }
+}
 
     window.prevStep = function() {
         document.getElementById(`step-${currentStep}`).classList.remove('active');
