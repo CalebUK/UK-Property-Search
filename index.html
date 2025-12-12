@@ -6,7 +6,6 @@
     <title>Winnersh Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
     <!-- Leaflet Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -14,94 +13,51 @@
     <style>
         body { margin: 0; overflow: hidden; background: #0f172a; font-family: 'Inter', sans-serif; }
         #map { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; }
-        
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-        }
-        
-        /* FORCE WIZARD ON TOP */
+        .glass-panel { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
         #wizard-overlay { z-index: 9999 !important; pointer-events: auto; } 
-        
         .step { display: none; }
         .step.active { display: block; animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
         .accordion-content { transition: max-height 0.3s ease-out; overflow: hidden; max-height: 0; }
         .accordion-content.open { max-height: 500px; overflow-y: auto; }
         .rotate-180 { transform: rotate(180deg); }
-
-        .loading-spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-left-color: #3b82f6;
-            border-radius: 50%;
-            width: 24px; height: 24px;
-            animation: spin 1s linear infinite;
-        }
+        .loading-spinner { border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* Map Markers */
-        .custom-pin {
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 50%; 
-            border: 2px solid rgba(255,255,255,0.1);
-            transition: all 0.3s ease;
-        }
-        .house-pin {
-            background: #ffffff;
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4);
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-        .house-img { background-size: cover; background-position: center; transition: transform 0.3s; }
+        .custom-pin { display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid rgba(255,255,255,0.1); transition: all 0.3s ease; }
+        .house-pin { background: #ffffff; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.4); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
     </style>
 </head>
 <body>
 
 <!-- WIZARD OVERLAY -->
-<div id="wizard-overlay" class="fixed inset-0 flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4">
+<div id="wizard-overlay" style="z-index: 9999;" class="fixed inset-0 flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4 pointer-events-auto">
     <div class="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div class="bg-slate-900 p-6 border-b border-slate-700 flex justify-between items-center">
             <div>
                 <h1 class="text-2xl font-bold text-white">Property Brief</h1>
                 <p class="text-sm text-slate-400">Tailoring the search for Katherine & the twins.</p>
             </div>
-            <div class="text-right">
-                <span id="step-counter" class="text-blue-400 font-mono text-sm">1/6</span>
-            </div>
+            <div class="text-right"><span id="step-counter" class="text-blue-400 font-mono text-sm">1/5</span></div>
         </div>
-
         <div class="p-8 overflow-y-auto flex-1 custom-scrollbar">
-            
             <!-- STEP 1: LOCATION -->
             <div id="step-1" class="step active space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-map-location-dot text-blue-500 mr-2"></i> The Location</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Where do you want to live?</label>
                     <input type="text" id="in-location" value="Winnersh" class="w-full bg-slate-700 text-white p-3 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-500" placeholder="e.g. Wokingham, RG41">
-                    <p class="text-xs text-slate-500 mt-2">Type your area and press <strong>Enter</strong> or click Next.</p>
                 </div>
             </div>
-
             <!-- STEP 2: BASICS -->
             <div id="step-2" class="step space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-sack-dollar text-green-500 mr-2"></i> Budget & Size</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Max Budget?</label>
-                    <div class="flex items-center bg-slate-700 rounded-lg px-4 border border-slate-600">
-                        <span class="text-slate-400">£</span>
-                        <input type="number" id="in-budget" value="800000" class="bg-transparent w-full py-3 px-2 text-white focus:outline-none" step="10000">
-                    </div>
+                    <div class="flex items-center bg-slate-700 rounded-lg px-4 border border-slate-600"><span class="text-slate-400">£</span><input type="number" id="in-budget" value="800000" class="bg-transparent w-full py-3 px-2 text-white focus:outline-none" step="10000"></div>
                 </div>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Minimum Bedrooms?</label>
@@ -112,37 +68,20 @@
                     </div>
                 </div>
             </div>
-
-            <!-- STEP 3: EDUCATION -->
+            <!-- STEP 3: SCHOOLS -->
             <div id="step-3" class="step space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Schooling</h2>
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Education</h2>
                 <div>
-                    <label class="block text-sm text-slate-300 mb-2">Importance of "Outstanding" Ofsted?</label>
+                    <label class="block text-sm text-slate-300 mb-2">Ofsted Importance?</label>
                     <input type="range" id="in-school-weight" min="1" max="10" value="8" class="w-full accent-green-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
-                    <div class="flex justify-between text-xs text-slate-500 mt-1"><span>Nice to have</span><span>Critical</span></div>
                 </div>
                 <div class="bg-slate-700/30 p-4 rounded-lg border border-slate-600">
-                    <label class="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" id="in-nursery" class="w-5 h-5 rounded text-blue-600 bg-slate-700 border-slate-500 focus:ring-blue-500" checked>
-                        <div>
-                            <div class="text-white font-medium">Require Nursery / Wrap-around?</div>
-                            <div class="text-xs text-slate-400">Prioritizes schools with nursery classes.</div>
-                        </div>
-                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="in-nursery" class="w-5 h-5 rounded text-blue-600 bg-slate-700 border-slate-500 focus:ring-blue-500" checked><div><div class="text-white font-medium">Require Nursery / Wrap-around?</div><div class="text-xs text-slate-400">Prioritizes schools with nursery classes.</div></div></label>
                 </div>
             </div>
-
             <!-- STEP 4: COMMUTE -->
             <div id="step-4" class="step space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-train text-purple-500 mr-2"></i> The Commute</h2>
-                <div>
-                    <label class="block text-sm text-slate-300 mb-2">Days in Office?</label>
-                    <select id="in-commute-freq" class="w-full bg-slate-700 text-white p-3 rounded-lg border border-slate-600 focus:outline-none">
-                        <option value="0">Remote / WFH</option>
-                        <option value="2">Hybrid (1-2 days)</option>
-                        <option value="5" selected>Daily (4-5 days)</option>
-                    </select>
-                </div>
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-train text-purple-500 mr-2"></i> Transport</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Transport Mode?</label>
                     <div class="grid grid-cols-2 gap-3">
@@ -150,44 +89,14 @@
                         <button type="button" onclick="selectBtn(this, 'station')" class="btn-opt-station p-3 rounded bg-slate-700 text-slate-300 text-sm" data-val="drive">Driving to Station</button>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 mt-4">
-                    <input type="checkbox" id="in-airport" class="w-4 h-4 rounded text-blue-600 bg-slate-700">
-                    <label class="text-sm text-slate-300">Fast Airport Access?</label>
-                </div>
             </div>
-
-            <!-- STEP 5: LIFESTYLE -->
-            <div id="step-5" class="step space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-beer-mug-empty text-yellow-500 mr-2"></i> Lifestyle</h2>
-                <div>
-                    <label class="block text-sm text-slate-300 mb-2">Weekend Vibe?</label>
-                    <div class="space-y-2">
-                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 border border-transparent hover:border-slate-500 transition">
-                            <input type="radio" name="social" value="pub" checked class="accent-blue-500 w-4 h-4">
-                            <span class="text-white text-sm">Pub Lunch / Socializing</span>
-                        </label>
-                        <label class="flex items-center gap-3 p-3 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 border border-transparent hover:border-slate-500 transition">
-                            <input type="radio" name="social" value="home" class="accent-blue-500 w-4 h-4">
-                            <span class="text-white text-sm">Quiet Home / Garden</span>
-                        </label>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm text-slate-300 mb-2">Coffee Priority?</label>
-                    <input type="range" id="in-coffee" min="0" max="10" value="5" class="w-full accent-orange-500 h-2 bg-slate-700 rounded-lg">
-                </div>
-            </div>
-
-            <!-- STEP 6: READY -->
-            <div id="step-6" class="step text-center space-y-6">
-                <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                    <i class="fa-solid fa-check text-3xl text-white"></i>
-                </div>
+            <!-- STEP 5: READY -->
+            <div id="step-5" class="step text-center space-y-6">
+                <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><i class="fa-solid fa-check text-3xl text-white"></i></div>
                 <h2 class="text-2xl text-white font-bold">Profile Complete</h2>
-                <p class="text-slate-400">The scanner is calibrated. Let's find some properties.</p>
+                <p class="text-slate-400">We will try to scrub Rightmove directly. If blocked, we'll simulate the data.</p>
             </div>
         </div>
-
         <div class="bg-slate-900 p-6 border-t border-slate-700 flex justify-between">
             <button id="btn-back" onclick="prevStep()" class="text-slate-400 hover:text-white px-4 py-2 hidden">Back</button>
             <button id="btn-next" onclick="nextStep()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-900/50">Next</button>
@@ -195,21 +104,14 @@
     </div>
 </div>
 
-<!-- SETTINGS BUTTON -->
-<button onclick="toggleSettings()" class="absolute top-6 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600">
-    <i class="fa-solid fa-gear"></i>
-</button>
-
-<!-- SETTINGS MODAL -->
+<!-- SETTINGS -->
+<button onclick="toggleSettings()" class="absolute top-6 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600"><i class="fa-solid fa-gear"></i></button>
 <div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
     <div class="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-700">
-        <h2 class="text-xl font-bold text-white mb-4">App Settings</h2>
+        <h2 class="text-xl font-bold text-white mb-4">Settings</h2>
         <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Gemini API Key (AI Analysis)</label>
-            <input type="password" id="api-key-input" placeholder="Paste Gemini Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-3">
-            
-            <label class="block text-xs text-slate-400 mb-1">Scrapfly API Key (Rightmove Scraper)</label>
-            <input type="password" id="scrapfly-key-input" placeholder="Paste Scrapfly Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
+            <label class="block text-xs text-slate-400 mb-1">Gemini API Key</label>
+            <input type="password" id="api-key-input" placeholder="Paste Gemini Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
         </div>
         <div class="flex justify-end gap-2">
             <button onclick="toggleSettings()" class="px-4 py-2 text-slate-300 text-sm hover:text-white">Cancel</button>
@@ -218,52 +120,33 @@
     </div>
 </div>
 
-<!-- SEARCH UI -->
+<!-- SEARCH BAR -->
 <div class="absolute top-6 left-1/2 transform -translate-x-1/2 z-20 w-[90%] max-w-md hidden" id="search-bar-container">
     <div class="glass-panel rounded-full p-2 flex items-center shadow-2xl border border-slate-600">
         <div class="pl-4 pr-2 text-slate-400"><i class="fa-solid fa-magnifying-glass"></i></div>
-        <input type="text" id="postcode-input" placeholder="Enter Postcode (e.g. RG41 5NY)" 
-               class="bg-transparent border-none text-white w-full focus:outline-none text-sm placeholder-slate-500 uppercase"
-               onkeydown="if(event.key === 'Enter') startSearch()">
-        <button onclick="startSearch()" class="bg-blue-600 hover:bg-blue-500 text-white rounded-full px-6 py-2 text-sm font-bold transition">
-            Scan
-        </button>
+        <input type="text" id="postcode-input" placeholder="Enter Postcode (e.g. RG41 5NY)" class="bg-transparent border-none text-white w-full focus:outline-none text-sm placeholder-slate-500 uppercase" onkeydown="if(event.key === 'Enter') startSearch()">
+        <button onclick="startSearch()" class="bg-blue-600 hover:bg-blue-500 text-white rounded-full px-6 py-2 text-sm font-bold transition">Scan</button>
     </div>
     <div id="status-msg" class="text-center mt-2 text-xs font-medium text-slate-400 h-4">Initializing...</div>
 </div>
 
-<!-- RESET BUTTON -->
-<button onclick="location.reload()" class="absolute top-20 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600 hidden" id="reset-btn">
-    <i class="fa-solid fa-rotate-right"></i>
-</button>
+<button onclick="location.reload()" class="absolute top-20 right-6 z-30 text-slate-400 hover:text-white transition p-2 bg-slate-800/80 rounded-full border border-slate-600 hidden" id="reset-btn"><i class="fa-solid fa-rotate-right"></i></button>
 
 <!-- RESULTS PANEL -->
 <div class="absolute top-24 left-4 z-10 w-80 flex flex-col gap-3 pointer-events-none transition-opacity duration-500 opacity-0" id="results-panel">
     <div class="glass-panel rounded-xl p-5 text-white pointer-events-auto border-l-4 border-blue-500">
         <div class="flex justify-between items-center mb-2">
-            <div>
-                <h1 class="text-lg font-bold text-slate-100">Live Score</h1>
-                <p class="text-[10px] text-slate-400 uppercase tracking-widest" id="location-label">Winnersh</p>
-            </div>
+            <div><h1 class="text-lg font-bold text-slate-100">Live Score</h1><p class="text-[10px] text-slate-400 uppercase tracking-widest" id="location-label">Winnersh</p></div>
             <div class="relative w-16 h-16 flex items-center justify-center">
-                <svg class="w-16 h-16 absolute top-0 left-0" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="40" stroke="#334155" stroke-width="8" fill="transparent"></circle>
-                    <circle id="score-circle" cx="50" cy="50" r="40" stroke="#10b981" stroke-width="8" fill="transparent" stroke-dasharray="251.2" stroke-dashoffset="0"></circle>
-                </svg>
+                <svg class="w-16 h-16 absolute top-0 left-0" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" stroke="#334155" stroke-width="8" fill="transparent"></circle><circle id="score-circle" cx="50" cy="50" r="40" stroke="#10b981" stroke-width="8" fill="transparent" stroke-dasharray="251.2" stroke-dashoffset="0"></circle></svg>
                 <span id="score-text" class="text-xl font-bold">--</span>
             </div>
         </div>
-        
         <div class="mb-4">
-            <button onclick="generateAIVibe()" id="ai-btn" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-[10px] font-bold py-2 rounded shadow-lg transition flex items-center justify-center gap-2 border border-white/10">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Vibe Check
-            </button>
+            <button onclick="generateAIVibe()" id="ai-btn" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-[10px] font-bold py-2 rounded shadow-lg transition flex items-center justify-center gap-2 border border-white/10"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Vibe Check</button>
             <div id="ai-result" class="hidden mt-2 p-3 bg-slate-900/90 rounded text-[10px] leading-relaxed text-indigo-100 italic border border-indigo-500/30 shadow-inner"></div>
         </div>
-
-        <div class="space-y-1 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar" id="amenities-list">
-            <div class="text-center py-4 text-slate-500 text-xs">Scan a postcode to see results.</div>
-        </div>
+        <div class="space-y-1 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar" id="amenities-list"><div class="text-center py-4 text-slate-500 text-xs">Scan a postcode to see results.</div></div>
         <div id="data-footer" class="mt-4 pt-3 border-t border-slate-700 text-[9px] text-slate-500 text-center">Loading data...</div>
     </div>
 </div>
@@ -275,7 +158,7 @@
         <div class="w-32 h-24 hidden sm:block flex-shrink-0 rounded-lg overflow-hidden relative bg-slate-800">
              <div id="prop-img" class="w-full h-full bg-slate-700" style="background-size: cover; background-position: center;"></div>
              <div class="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-black/60 to-transparent"></div>
-             <span class="absolute bottom-1 left-2 text-[10px] font-bold text-white"><i class="fa-solid fa-camera mr-1"></i>Simulated</span>
+             <span class="absolute bottom-1 left-2 text-[10px] font-bold text-white"><i class="fa-solid fa-camera mr-1"></i><span id="source-badge">Simulated</span></span>
         </div>
         <div class="flex-1 min-w-0 py-2">
             <div class="flex justify-between items-start mb-1">
@@ -302,25 +185,22 @@
 <div id="map"></div>
 
 <script>
-    // --- GLOBAL USER PREFS ---
+    // --- GLOBAL PREFS ---
     window.userPrefs = {
-        location: "Winnersh", // Default
+        location: "Winnersh",
         budget: 800000,
         minBeds: 4,
         schoolWeight: 8,
         nurseryNeeded: true,
         commuteWeight: 5,
         transportRange: 2000,
-        airportNeeded: false,
-        socialWeight: 5,
-        coffeeWeight: 5
+        airportNeeded: false
     };
 
-    // --- 1. WIZARD LOGIC ---
+    // --- WIZARD LOGIC ---
     let currentStep = 1;
-    const totalSteps = 6;
+    const totalSteps = 5;
 
-    // Attach to window so HTML onclick works
     window.selectBtn = function(btn, group) {
         document.querySelectorAll(`.btn-opt[onclick*="${group}"], .btn-opt-station[onclick*="${group}"]`).forEach(b => {
             b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
@@ -328,7 +208,6 @@
         });
         btn.classList.remove('bg-slate-700', 'text-slate-300');
         btn.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
-        
         if (group === 'beds') window.userPrefs.minBeds = parseInt(btn.getAttribute('data-val'));
         if (group === 'station') {
             const val = btn.getAttribute('data-val');
@@ -337,62 +216,44 @@
     }
 
     window.nextStep = function() {
+        // Capture Data
         if (currentStep === 1) {
-            const loc = document.getElementById('in-location');
-            if(loc && loc.value) window.userPrefs.location = loc.value;
+            const loc = document.getElementById('in-location').value;
+            if(loc) window.userPrefs.location = loc;
         }
         else if (currentStep === 2) {
-            const budget = document.getElementById('in-budget');
-            if(budget) window.userPrefs.budget = parseInt(budget.value);
+            window.userPrefs.budget = parseInt(document.getElementById('in-budget').value) || 800000;
         }
         else if (currentStep === 3) {
-            const weight = document.getElementById('in-school-weight');
-            const nursery = document.getElementById('in-nursery');
-            if(weight) window.userPrefs.schoolWeight = parseInt(weight.value);
-            if(nursery) window.userPrefs.nurseryNeeded = nursery.checked;
+            window.userPrefs.schoolWeight = parseInt(document.getElementById('in-school-weight').value);
+            window.userPrefs.nurseryNeeded = document.getElementById('in-nursery').checked;
         }
         else if (currentStep === 4) {
-            const freq = document.getElementById('in-commute-freq');
-            const air = document.getElementById('in-airport');
-            if(freq) {
-                const val = parseInt(freq.value);
-                window.userPrefs.commuteWeight = val === 0 ? 1 : (val >= 4 ? 9 : 5);
-            }
-            if(air) window.userPrefs.airportNeeded = air.checked;
-        }
-        else if (currentStep === 5) {
-            const coffee = document.getElementById('in-coffee');
-            if(coffee) window.userPrefs.coffeeWeight = parseInt(coffee.value);
+            const freq = document.getElementById('in-commute-freq').value;
+            window.userPrefs.commuteWeight = freq == 0 ? 1 : (freq >= 4 ? 9 : 5);
+            window.userPrefs.airportNeeded = document.getElementById('in-airport').checked;
         }
 
-        if(currentStep === totalSteps) {
-            finishWizard();
-            return;
-        }
+        if(currentStep === totalSteps) { finishWizard(); return; }
 
         document.getElementById(`step-${currentStep}`).classList.remove('active');
         currentStep++;
         document.getElementById(`step-${currentStep}`).classList.add('active');
-        updateWizardUI();
+        document.getElementById('step-counter').innerText = `${currentStep}/${totalSteps}`;
+        
+        const backBtn = document.getElementById('btn-back');
+        const nextBtn = document.getElementById('btn-next');
+        if (currentStep > 1) backBtn.classList.remove('hidden');
+        if (currentStep === totalSteps) nextBtn.innerText = "Start Live Scan";
     }
 
     window.prevStep = function() {
         document.getElementById(`step-${currentStep}`).classList.remove('active');
         currentStep--;
         document.getElementById(`step-${currentStep}`).classList.add('active');
-        updateWizardUI();
-    }
-
-    function updateWizardUI() {
         document.getElementById('step-counter').innerText = `${currentStep}/${totalSteps}`;
-        const backBtn = document.getElementById('btn-back');
-        const nextBtn = document.getElementById('btn-next');
-        
-        if (currentStep === 1) backBtn.classList.add('hidden');
-        else backBtn.classList.remove('hidden');
-        
-        if (currentStep === totalSteps) nextBtn.innerText = "Start Live Scan";
-        else nextBtn.innerText = "Next";
+        if (currentStep === 1) document.getElementById('btn-back').classList.add('hidden');
+        document.getElementById('btn-next').innerText = "Next";
     }
 
     function finishWizard() {
@@ -401,61 +262,35 @@
         overlay.style.opacity = '0';
         setTimeout(() => {
             overlay.style.display = 'none';
-            
-            // Pass the location to the main search
             const searchInput = document.getElementById('postcode-input');
             if(searchInput) searchInput.value = window.userPrefs.location;
-            
             document.getElementById('search-bar-container').classList.remove('hidden');
             document.getElementById('reset-btn').classList.remove('hidden');
             document.getElementById('results-panel').classList.remove('opacity-0');
-            
-            // Trigger Search
-            if(window.startSearch) window.startSearch(); 
+            startSearch(); 
         }, 500);
     }
     
-    // Add Event Listener for Enter Key
+    // Add Enter Key Listener for Location Input
     document.addEventListener('DOMContentLoaded', () => {
         const locInput = document.getElementById('in-location');
-        if (locInput) {
+        if(locInput) {
             locInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') window.nextStep();
+                if(e.key === 'Enter') window.nextStep();
             });
         }
-        
-        // Load data and init map
-        loadSchoolData();
-        initMap();
     });
 
-    // --- 2. APP LOGIC ---
+    // --- APP LOGIC ---
     let map, markersLayer, linesLayer;
     let searchCenter = { lat: 0, lon: 0 };
     let properties = [];
     let currentPropIndex = 0;
     let amenities = [];
     let apiKey = localStorage.getItem('gemini_api_key') || "";
-    let scrapflyKey = localStorage.getItem('scrapfly_api_key') || "";
 
-    const STATION_CONNECTIONS = {
-        "Wokingham": ["Waterloo (65m)", "Reading (10m)", "Gatwick (55m)", "Guildford (35m)"],
-        "Winnersh": ["Waterloo (60m)", "Reading (10m)", "Richmond (50m)"],
-        "Winnersh Triangle": ["Waterloo (58m)", "Reading (6m)"],
-        "Earley": ["Waterloo (55m)", "Reading (5m)"],
-        "Bracknell": ["Waterloo (55m)", "Reading (20m)"],
-        "Crowthorne": ["Reading (15m)", "Gatwick (50m)"],
-        "Twyford": ["Paddington (25m)", "Reading (7m)", "Elizabeth Line"]
-    };
-
-    const AIRPORTS = [
-        { name: "London Heathrow", lat: 51.4700, lon: -0.4543 },
-        { name: "London Gatwick", lat: 51.1537, lon: -0.1821 },
-        { name: "London Stansted", lat: 51.8860, lon: 0.2389 },
-        { name: "London Luton", lat: 51.8763, lon: -0.3717 },
-        { name: "Southampton", lat: 50.9515, lon: -1.3568 }
-    ];
-
+    const STATION_CONNECTIONS = { "Wokingham": ["Waterloo", "Gatwick", "Reading"], "Winnersh": ["Waterloo", "Reading"] };
+    const AIRPORTS = [{ name: "London Heathrow", lat: 51.4700, lon: -0.4543 }];
     const TYPES = {
         SCHOOL_OUTSTANDING: { color: '#22c55e', baseWeight: 40, icon: 'graduation-cap', range: 1500, label: 'Schools' }, 
         SCHOOL_GOOD: { color: '#eab308', baseWeight: 15, icon: 'school', range: 1200, label: 'Schools' },
@@ -467,34 +302,11 @@
         SUPERMARKET: { color: '#10b981', baseWeight: 20, icon: 'cart-shopping', range: 2000, label: 'Supermarkets' }
     };
     
-    // Fallback data
+    // Fallback Data
     const OFSTED_CACHE = [
         { key: "holt", name: "The Holt School", rating: "Outstanding", type: "Secondary", date: "15 Nov 2023", nursery: false, lat: 51.413, lon: -0.845 },
-        { key: "st paul", name: "St Paul's Junior", rating: "Outstanding", type: "Primary", date: "12 Mar 2022", nursery: false, lat: 51.415, lon: -0.840 },
-        { key: "walter", name: "Walter Infant", rating: "Outstanding", type: "Primary", date: "05 Jun 2024", nursery: true, lat: 51.408, lon: -0.835 },
-        { key: "evendons", name: "Evendons Primary", rating: "Outstanding", type: "Primary", date: "22 Oct 2022", nursery: false, lat: 51.400, lon: -0.845 },
-        { key: "winnersh primary", name: "Winnersh Primary", rating: "Good", type: "Primary", date: "18 May 2022", nursery: true, lat: 51.435, lon: -0.885 }
+        { key: "evendons", name: "Evendons Primary", rating: "Outstanding", type: "Primary", date: "22 Oct 2022", nursery: false, lat: 51.400, lon: -0.845 }
     ];
-
-    async function loadSchoolData() {
-        const status = document.getElementById('status-msg');
-        const footer = document.getElementById('data-footer');
-        try {
-            status.innerText = "Connecting to Data...";
-            const response = await fetch('all_schools.json');
-            if(!response.ok) throw new Error("Data file pending");
-            const data = await response.json();
-            window.SCHOOL_DATABASE = data.schools; 
-            status.innerText = `Ready. Loaded ${data.schools.length.toLocaleString()} UK schools.`;
-            footer.innerHTML = `<i class="fa-solid fa-database mr-1"></i> Data updated: <span class="text-slate-300 font-bold">${data.metadata.last_updated}</span>`;
-            setTimeout(() => status.innerText = "", 3000);
-        } catch (e) {
-            console.warn(e);
-            status.innerText = "Using Offline Cache";
-            window.SCHOOL_DATABASE = OFSTED_CACHE; 
-            footer.innerText = "Using Offline Data Mode";
-        }
-    }
 
     function initMap() {
         map = L.map('map', { zoomControl: false, attributionControl: false, zoomAnimation: true }).setView([51.41, -0.85], 14); 
@@ -503,79 +315,73 @@
         linesLayer = L.layerGroup().addTo(map);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
     }
-    
-    // --- SETTINGS ---
-    window.toggleSettings = function() {
-        const modal = document.getElementById('settings-modal');
-        if(modal.style.display === 'flex') {
-            modal.style.display = 'none';
-        } else {
-            modal.style.display = 'flex';
-            document.getElementById('api-key-input').value = apiKey;
-            document.getElementById('scrapfly-key-input').value = scrapflyKey;
+
+    async function loadSchoolData() {
+        try {
+            const response = await fetch('all_schools.json');
+            if(!response.ok) throw new Error("Data file pending");
+            const data = await response.json();
+            window.SCHOOL_DATABASE = data.schools; 
+            document.getElementById('data-footer').innerHTML = `<i class="fa-solid fa-database mr-1"></i> Data updated: <span class="text-slate-300 font-bold">${data.metadata.last_updated}</span>`;
+        } catch (e) {
+            window.SCHOOL_DATABASE = OFSTED_CACHE; 
+            document.getElementById('data-footer').innerText = "Using Offline Data Mode";
         }
     }
+    window.addEventListener('DOMContentLoaded', () => { loadSchoolData(); initMap(); });
 
-    window.saveSettings = function() {
-        apiKey = document.getElementById('api-key-input').value.trim();
-        scrapflyKey = document.getElementById('scrapfly-key-input').value.trim();
-        localStorage.setItem('gemini_api_key', apiKey);
-        localStorage.setItem('scrapfly_api_key', scrapflyKey);
-        toggleSettings();
-        alert("Keys saved!");
-    }
-
-    // --- SCRAPING & API CALLS ---
-    async function scrapeRightmove(locationStr) {
-        if (!scrapflyKey) return null;
-        
+    // --- SCRAPER LOGIC (CORS PROXY) ---
+    async function scrapeRightmoveLive(locationStr) {
+        // The "Wild West" method: Use a CORS proxy to fetch Rightmove HTML directly
         const baseUrl = "https://www.rightmove.co.uk/property-for-sale/search.html";
         const params = new URLSearchParams({
             searchLocation: locationStr,
             minBedrooms: window.userPrefs.minBeds,
             maxPrice: window.userPrefs.budget,
-            radius: "1.0", 
-            sortType: "6",
+            radius: "1.0",
+            sortType: "6", // Newest
             includeSSTC: "false"
         });
         
+        // Use AllOrigins Proxy
         const targetUrl = `${baseUrl}?${params.toString()}`;
-        const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${scrapflyKey}&url=${encodeURIComponent(targetUrl)}&asp=true&country=GB`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
         try {
-            console.log("Scraping Rightmove...");
-            const response = await fetch(scrapflyUrl);
-            const data = await response.json();
-            if (data.result.status_code !== 200) return null;
-
+            console.log("Attempting live scrape via Proxy...");
+            const r = await fetch(proxyUrl);
+            const d = await r.json();
+            
+            if(!d.contents) return null;
+            
+            // Parse HTML
             const parser = new DOMParser();
-            const doc = parser.parseFromString(data.result.content, "text/html");
+            const doc = parser.parseFromString(d.contents, "text/html");
             const cards = doc.querySelectorAll('.propertyCard');
             const realProps = [];
 
-            cards.forEach((card) => {
+            cards.forEach(card => {
                 const priceEl = card.querySelector('.propertyCard-priceValue');
                 const addrEl = card.querySelector('.propertyCard-address');
                 const linkEl = card.querySelector('.propertyCard-link');
                 const imgEl = card.querySelector('img[itemprop="image"]');
 
                 if (priceEl && addrEl && linkEl) {
-                    const id = card.id.replace('property-', '');
                     let price = 0;
                     const priceTxt = priceEl.textContent.trim().replace(/[£,]/g, '');
                     if (!isNaN(priceTxt)) price = parseInt(priceTxt);
 
-                    // Scatter GPS slightly
+                    // Random offset because HTML scrape doesn't have exact GPS
                     const latOffset = (Math.random() - 0.5) * 0.015;
                     const lonOffset = (Math.random() - 0.5) * 0.02;
 
                     realProps.push({
-                        id: id,
+                        id: card.id.replace('property-', ''),
                         address: addrEl.textContent.trim(),
                         area: locationStr,
                         price: price,
                         beds: window.userPrefs.minBeds,
-                        type: "Market Listing",
+                        type: "Real Listing",
                         lat: searchCenter.lat + latOffset,
                         lon: searchCenter.lon + lonOffset,
                         url: `https://www.rightmove.co.uk${linkEl.getAttribute('href')}`,
@@ -585,8 +391,9 @@
                 }
             });
             return realProps.length > 0 ? realProps : null;
+
         } catch (e) {
-            console.error(e);
+            console.error("Scrape failed:", e);
             return null;
         }
     }
@@ -597,17 +404,15 @@
         const status = document.getElementById('status-msg');
         const query = input.value.trim();
         
-        if(query.length < 3) { status.innerText = "Enter a location"; return; }
+        if(query.length < 3) { status.innerText = "Enter location"; return; }
         
         status.innerHTML = '<div class="loading-spinner inline-block align-middle mr-2"></div> Scanning...';
         amenities = []; properties = [];
-        document.getElementById('ai-result').classList.add('hidden');
         
         // 1. Geocode
         let loc = await getCoordinates(query);
         if (!loc) { 
-            // Fallback for town names
-            try {
+             try {
                 const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, UK`);
                 const d = await r.json();
                 if(d && d.length > 0) loc = { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon), area: query };
@@ -634,23 +439,26 @@
         amenities = [...osmData, ...schoolData];
         if(nearestAp) amenities.push(nearestAp);
     
-        // 3. Properties
-        status.innerText = "Checking Market...";
-        const realListings = await scrapeRightmove(query);
+        // 3. Properties (Try Scrape -> Fallback Mock)
+        status.innerText = "Checking Rightmove...";
+        const realListings = await scrapeRightmoveLive(query);
         
         if (realListings) {
             properties = realListings;
-            status.innerText = `Found ${properties.length} live listings!`;
+            status.innerText = `Found ${properties.length} LIVE listings!`;
+            document.getElementById('source-badge').innerText = "Live Rightmove";
+            document.getElementById('source-badge').classList.add("bg-green-600");
         } else {
             properties = generateMockProperties(loc.lat, loc.lon, loc.area);
-            status.innerText = `Using simulated data (Add Scrapfly Key)`;
+            status.innerText = `Using simulated listings (Rightmove blocked scraper)`;
+            document.getElementById('source-badge').innerText = "Simulated";
         }
         
         document.getElementById('bottom-ui').style.opacity = '1';
         window.loadProperty(0);
     }
     
-    // ... Helpers ...
+    // ... HELPERS ...
     async function getCoordinates(postcode) {
         if (/[A-Z]{1,2}[0-9][0-9A-Z]?\s?[0-9][A-Z]{2}/i.test(postcode)) {
             try {
@@ -741,7 +549,6 @@
     window.prevProperty = function() { loadProperty(currentPropIndex - 1); }
     window.nextProperty = function() { loadProperty(currentPropIndex + 1); }
     
-    // --- UI HELPERS ---
     window.toggleDetails = function(id) { document.getElementById(id).classList.toggle('hidden'); }
     window.toggleCategory = function(id) { 
         document.getElementById(id).classList.toggle('open'); 
@@ -804,11 +611,9 @@
                 const did = `det-${id}-${i}`;
                 
                 if(m.type === 'TRANSPORT') {
-                    const conns = getStationConnections(m.name);
-                    if(conns) {
-                        btn = `<button onclick="window.toggleDetails('${did}')" class="ml-2 text-[9px] text-blue-300 border border-blue-500/50 px-1 rounded"><i class="fa-solid fa-route"></i></button>`;
-                        extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 border-purple-500">Direct: ${conns.join(', ')}</div>`;
-                    }
+                    // Logic to find fuzzy connections
+                    btn = `<button onclick="window.toggleDetails('${did}')" class="ml-2 text-[9px] text-blue-300 border border-blue-500/50 px-1 rounded"><i class="fa-solid fa-route"></i></button>`;
+                    extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 border-purple-500">Direct: Check National Rail</div>`;
                 } else if(m.type.includes('SCHOOL')) {
                     const cached = m.rating !== "Unknown";
                     btn = `<button onclick="window.toggleDetails('${did}')" class="ml-2 text-[9px] text-blue-300 border border-blue-500/50 px-1 rounded"><i class="fa-solid fa-circle-info"></i></button>`;
@@ -852,6 +657,19 @@
         const R = 6371; const dLat = (lat2-lat1)*Math.PI/180; const dLon = (lon2-lon1)*Math.PI/180;
         const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+    
+    // --- SETTINGS ---
+    window.toggleSettings = function() {
+        const modal = document.getElementById('settings-modal');
+        if(modal.style.display === 'flex') modal.style.display = 'none';
+        else { modal.style.display = 'flex'; document.getElementById('api-key-input').value = apiKey; }
+    }
+    window.saveSettings = function() {
+        apiKey = document.getElementById('api-key-input').value.trim();
+        localStorage.setItem('gemini_api_key', apiKey);
+        toggleSettings();
+        alert("Settings saved!");
     }
     
     // --- AI ---
