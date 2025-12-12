@@ -1,6 +1,4 @@
-// survey.js
-
-// 1. Initialize User Preferences
+// Global State for User Preferences
 window.userPrefs = {
     location: "Winnersh", 
     budget: 800000,
@@ -17,17 +15,19 @@ window.userPrefs = {
 let currentStep = 1;
 const totalSteps = 6;
 
-// 2. Button Selection Logic
+// Function to handle button clicks (Attached to window so HTML can see it)
 window.selectBtn = function(btn, group) {
-    // Visual toggle
+    // Reset visual styles for this group
     document.querySelectorAll(`.btn-opt[onclick*="'${group}'"], .btn-opt-station[onclick*="'${group}'"]`).forEach(b => {
         b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
         b.classList.add('bg-slate-700', 'text-slate-300');
     });
+    
+    // Highlight the clicked button
     btn.classList.remove('bg-slate-700', 'text-slate-300');
     btn.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
     
-    // Save value
+    // Save the value
     if (group === 'beds') window.userPrefs.minBeds = parseInt(btn.getAttribute('data-val'));
     if (group === 'station') {
         const val = btn.getAttribute('data-val');
@@ -35,9 +35,8 @@ window.selectBtn = function(btn, group) {
     }
 }
 
-// 3. Navigation Logic
 window.nextStep = function() {
-    // Save input values before moving
+    // Capture inputs before moving
     if (currentStep === 1) {
         const loc = document.getElementById('in-location');
         if(loc && loc.value) window.userPrefs.location = loc.value;
@@ -71,7 +70,7 @@ window.nextStep = function() {
         return;
     }
 
-    // Animate to next step
+    // Switch Steps
     document.getElementById(`step-${currentStep}`).classList.remove('active');
     currentStep++;
     document.getElementById(`step-${currentStep}`).classList.add('active');
@@ -97,7 +96,7 @@ function updateWizardUI() {
     else nextBtn.innerText = "Next";
 }
 
-function finishWizard() {
+window.finishWizard = function() {
     const overlay = document.getElementById('wizard-overlay');
     overlay.style.opacity = '0';
     setTimeout(() => {
@@ -107,19 +106,18 @@ function finishWizard() {
         const searchInput = document.getElementById('postcode-input');
         if(searchInput) searchInput.value = window.userPrefs.location;
         
-        // Show UI
+        // Reveal App UI
         document.getElementById('search-bar-container').classList.remove('hidden');
         document.getElementById('reset-btn').classList.remove('hidden');
         document.getElementById('results-panel').classList.remove('opacity-0');
         
-        // Trigger Main App Search (This function lives in app.js)
+        // Run Search (Function exists in app.js)
         if(window.startSearch) window.startSearch(); 
     }, 500);
 }
 
-// 4. Init Listeners
+// Add 'Enter' key support for the location step
 document.addEventListener('DOMContentLoaded', () => {
-    // Allow pressing "Enter" on location step
     const locInput = document.getElementById('in-location');
     if (locInput) {
         locInput.addEventListener('keydown', (e) => {
