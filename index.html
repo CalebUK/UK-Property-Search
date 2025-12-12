@@ -6,15 +6,14 @@
     <title>Live Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
     <!-- Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <!-- App Logic -->
     <script src="schools.js"></script>
-    <script src="survey.js"></script>
     <script src="config.js"></script>
+    <script src="survey.js"></script>
     <script src="app.js" defer></script>
 
     <style>
@@ -67,6 +66,7 @@
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
+        .house-img { background-size: cover; background-position: center; transition: transform 0.3s; }
     </style>
 </head>
 <body>
@@ -80,14 +80,25 @@
                 <p class="text-sm text-slate-400">Tailoring the search for Katherine & the twins.</p>
             </div>
             <div class="text-right">
-                <span id="step-counter" class="text-blue-400 font-mono text-sm">1/5</span>
+                <span id="step-counter" class="text-blue-400 font-mono text-sm">1/6</span>
             </div>
         </div>
 
         <div class="p-8 overflow-y-auto flex-1 custom-scrollbar">
-            <!-- STEP 1: BASICS -->
+            
+            <!-- STEP 1: LOCATION -->
             <div id="step-1" class="step active space-y-6">
-                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-house-chimney text-blue-500 mr-2"></i> The Essentials</h2>
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-map-location-dot text-blue-500 mr-2"></i> The Location</h2>
+                <div>
+                    <label class="block text-sm text-slate-300 mb-2">Where do you want to live?</label>
+                    <input type="text" id="in-location" value="Winnersh" class="w-full bg-slate-700 text-white p-3 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-500" placeholder="e.g. Wokingham, RG41">
+                    <p class="text-xs text-slate-500 mt-2">We will scrub Rightmove for properties in this area.</p>
+                </div>
+            </div>
+
+            <!-- STEP 2: BASICS -->
+            <div id="step-2" class="step space-y-6">
+                <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-sack-dollar text-green-500 mr-2"></i> Budget & Size</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Max Budget?</label>
                     <div class="flex items-center bg-slate-700 rounded-lg px-4 border border-slate-600">
@@ -105,8 +116,8 @@
                 </div>
             </div>
 
-            <!-- STEP 2: EDUCATION -->
-            <div id="step-2" class="step space-y-6">
+            <!-- STEP 3: EDUCATION -->
+            <div id="step-3" class="step space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-graduation-cap text-green-500 mr-2"></i> Schooling</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Importance of "Outstanding" Ofsted?</label>
@@ -124,8 +135,8 @@
                 </div>
             </div>
 
-            <!-- STEP 3: COMMUTE -->
-            <div id="step-3" class="step space-y-6">
+            <!-- STEP 4: COMMUTE -->
+            <div id="step-4" class="step space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-train text-purple-500 mr-2"></i> The Commute</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Days in Office?</label>
@@ -148,8 +159,8 @@
                 </div>
             </div>
 
-            <!-- STEP 4: LIFESTYLE -->
-            <div id="step-4" class="step space-y-6">
+            <!-- STEP 5: LIFESTYLE -->
+            <div id="step-5" class="step space-y-6">
                 <h2 class="text-xl text-white font-semibold mb-4"><i class="fa-solid fa-beer-mug-empty text-yellow-500 mr-2"></i> Lifestyle</h2>
                 <div>
                     <label class="block text-sm text-slate-300 mb-2">Weekend Vibe?</label>
@@ -170,13 +181,13 @@
                 </div>
             </div>
 
-            <!-- STEP 5: READY -->
-            <div id="step-5" class="step text-center space-y-6">
+            <!-- STEP 6: READY -->
+            <div id="step-6" class="step text-center space-y-6">
                 <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                     <i class="fa-solid fa-check text-3xl text-white"></i>
                 </div>
                 <h2 class="text-2xl text-white font-bold">Profile Complete</h2>
-                <p class="text-slate-400">The scanner is calibrated. Let's find some properties in Winnersh.</p>
+                <p class="text-slate-400">The scanner is calibrated. Let's find some properties.</p>
             </div>
         </div>
 
@@ -197,10 +208,11 @@
     <div class="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-700">
         <h2 class="text-xl font-bold text-white mb-4">App Settings</h2>
         <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Gemini API Key</label>
-            <input type="password" id="api-key-input" placeholder="Paste your API key here" 
-                   class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-sm">
-            <p class="text-[10px] text-slate-500 mt-1">Stored locally in your browser for the AI Vibe Check.</p>
+            <label class="block text-xs text-slate-400 mb-1">Gemini API Key (AI Analysis)</label>
+            <input type="password" id="api-key-input" placeholder="Paste Gemini Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-3">
+            
+            <label class="block text-xs text-slate-400 mb-1">Scrapfly API Key (Rightmove Scraper)</label>
+            <input type="password" id="scrapfly-key-input" placeholder="Paste Scrapfly Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
         </div>
         <div class="flex justify-end gap-2">
             <button onclick="toggleSettings()" class="px-4 py-2 text-slate-300 text-sm hover:text-white">Cancel</button>
@@ -215,7 +227,6 @@
         <div class="pl-4 pr-2 text-slate-400"><i class="fa-solid fa-magnifying-glass"></i></div>
         <input type="text" id="postcode-input" placeholder="Enter Postcode (e.g. RG41 5NY)" 
                class="bg-transparent border-none text-white w-full focus:outline-none text-sm placeholder-slate-500 uppercase"
-               value="RG41 5NY"
                onkeydown="if(event.key === 'Enter') startSearch()">
         <button onclick="startSearch()" class="bg-blue-600 hover:bg-blue-500 text-white rounded-full px-6 py-2 text-sm font-bold transition">
             Scan
