@@ -1,6 +1,6 @@
 // Global State for User Preferences
 window.userPrefs = {
-    location: "Winnersh", // Default
+    location: "Winnersh",
     budget: 800000,
     minBeds: 4,
     schoolWeight: 8,
@@ -13,16 +13,77 @@ window.userPrefs = {
 };
 
 let currentStep = 1;
-const totalSteps = 6; // Increased to 6 steps
+const totalSteps = 6;
+
+// --- PERSISTENCE ---
+window.loadSavedPrefs = function() {
+    const saved = localStorage.getItem('property_brief');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            window.userPrefs = { ...window.userPrefs, ...parsed };
+            console.log("Loaded prefs:", window.userPrefs);
+            
+            // Populate UI inputs to match saved data
+            populateWizardInputs();
+            return true;
+        } catch (e) { console.error("Error loading prefs", e); }
+    }
+    return false;
+}
+
+window.savePrefs = function() {
+    localStorage.setItem('property_brief', JSON.stringify(window.userPrefs));
+}
+
+function populateWizardInputs() {
+    // Helper to set values if elements exist
+    const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+    const setCheck = (id, val) => { const el = document.getElementById(id); if(el) el.checked = val; };
+    
+    setVal('in-location', window.userPrefs.location);
+    setVal('in-budget', window.userPrefs.budget);
+    
+    // Beds Buttons
+    document.querySelectorAll(`.btn-opt[onclick*="'beds'"]`).forEach(b => {
+        const val = parseInt(b.getAttribute('data-val'));
+        if (val === window.userPrefs.minBeds) window.selectBtn(b, 'beds');
+    });
+
+    setVal('in-school-weight', window.userPrefs.schoolWeight);
+    setCheck('in-nursery', window.userPrefs.nurseryNeeded);
+    
+    // Commute
+    const freqEl = document.getElementById('in-commute-freq');
+    if(freqEl) {
+        if (window.userPrefs.commuteWeight <= 1) freqEl.value = "0";
+        else if (window.userPrefs.commuteWeight >= 9) freqEl.value = "5";
+        else freqEl.value = "2";
+    }
+    
+    // Station Preference
+    const stationMode = window.userPrefs.transportRange > 2000 ? 'drive' : 'walk';
+    document.querySelectorAll(`.btn-opt-station`).forEach(b => {
+        if(b.getAttribute('data-val') === stationMode) window.selectBtn(b, 'station');
+    });
+
+    setCheck('in-airport', window.userPrefs.airportNeeded);
+    setVal('in-coffee', window.userPrefs.coffeeWeight);
+}
+
+// --- WIZARD LOGIC ---
 
 window.selectBtn = function(btn, group) {
-    document.querySelectorAll(`.btn-opt[onclick*="${group}"], .btn-opt-station[onclick*="${group}"]`).forEach(b => {
+    // Reset group styles
+    document.querySelectorAll(`.btn-opt[onclick*="'${group}'"], .btn-opt-station[onclick*="'${group}'"]`).forEach(b => {
         b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
         b.classList.add('bg-slate-700', 'text-slate-300');
     });
+    // Highlight selected
     btn.classList.remove('bg-slate-700', 'text-slate-300');
     btn.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'ring-2');
     
+    // Update State
     if (group === 'beds') window.userPrefs.minBeds = parseInt(btn.getAttribute('data-val'));
     if (group === 'station') {
         const val = btn.getAttribute('data-val');
@@ -30,11 +91,26 @@ window.selectBtn = function(btn, group) {
     }
 }
 
+window.openWizard = function() {
+    const overlay = document.getElementById('wizard-overlay');
+    overlay.style.display = 'flex';
+    setTimeout(() => overlay.style.opacity = '1', 10);
+    
+    // Reset to step 1
+    document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+    currentStep = 1;
+    document.getElementById('step-1').classList.add('active');
+    updateWizardUI();
+    
+    // Ensure inputs match current prefs
+    populateWizardInputs();
+}
+
 window.nextStep = function() {
-    // Capture Data based on current step
+    // Capture Data on move
     if (currentStep === 1) {
         const loc = document.getElementById('in-location');
-        if(loc && loc.value) window.userPrefs.location = loc.value;
+        if(loc) window.userPrefs.location = loc.value;
     }
     else if (currentStep === 2) {
         const budget = document.getElementById('in-budget');
@@ -65,7 +141,6 @@ window.nextStep = function() {
         return;
     }
 
-    // UI Move
     document.getElementById(`step-${currentStep}`).classList.remove('active');
     currentStep++;
     document.getElementById(`step-${currentStep}`).classList.add('active');
@@ -87,26 +162,28 @@ function updateWizardUI() {
     if (currentStep === 1) backBtn.classList.add('hidden');
     else backBtn.classList.remove('hidden');
     
-    if (currentStep === totalSteps) nextBtn.innerText = "Start Live Scan";
+    if (currentStep === totalSteps) nextBtn.innerText = "Update & Scan";
     else nextBtn.innerText = "Next";
 }
 
 window.finishWizard = function() {
+    window.savePrefs(); // Save to local storage
+    
     const overlay = document.getElementById('wizard-overlay');
-    overlay.style.transition = 'opacity 0.5s';
     overlay.style.opacity = '0';
     setTimeout(() => {
         overlay.style.display = 'none';
         
-        // Populate the main search bar with the wizard choice
+        // Populate main search bar
         const searchInput = document.getElementById('postcode-input');
-        if(searchInput) searchInput.value = window.userPrefs.location;
+        if(searchInput && window.userPrefs.location) searchInput.value = window.userPrefs.location;
         
+        // Show UI elements
         document.getElementById('search-bar-container').classList.remove('hidden');
         document.getElementById('reset-btn').classList.remove('hidden');
         document.getElementById('results-panel').classList.remove('opacity-0');
         
-        // Trigger the search
+        // Trigger search
         if(window.startSearch) window.startSearch(); 
     }, 500);
 }
