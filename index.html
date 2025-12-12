@@ -6,6 +6,7 @@
     <title>Live Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Load Schools Logic -->
     <script src="schools.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #0f172a; font-family: 'Inter', sans-serif; }
@@ -24,18 +25,13 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
         .accordion-content { transition: max-height 0.3s ease-out; overflow: hidden; max-height: 0; }
         .accordion-content.open { max-height: 500px; overflow-y: auto; }
         .rotate-180 { transform: rotate(180deg); }
-
-        .house-img {
-            background-size: cover; background-position: center; transition: transform 0.3s;
-        }
+        .house-img { background-size: cover; background-position: center; transition: transform 0.3s; }
     </style>
 </head>
 <body>
@@ -52,7 +48,6 @@
             Scan
         </button>
     </div>
-    <!-- Error/Status Message -->
     <div id="status-msg" class="text-center mt-2 text-xs font-medium text-slate-400 h-4">Initializing...</div>
 </div>
 
@@ -130,13 +125,11 @@
             const response = await fetch('all_schools.json');
             
             if(!response.ok) {
-                // Handle first-load 404 (if GitHub Action hasn't run yet)
+                // Fallback for demo if file missing
                 throw new Error("Data file pending");
             }
             
             const data = await response.json();
-            
-            // Assign to global for schools.js logic
             window.SCHOOL_DATABASE = data.schools; 
             
             status.innerText = `Ready. Loaded ${data.schools.length.toLocaleString()} UK schools.`;
@@ -145,10 +138,10 @@
             setTimeout(() => status.innerText = "", 3000);
         } catch (e) {
             console.warn(e);
-            status.innerText = "Using Offline Cache (Gov Data Pending)";
-            // Fallback to static cache if fetch fails
-            window.SCHOOL_DATABASE = OFSTED_CACHE; 
-            footer.innerText = "Using Offline Data Mode";
+            status.innerText = "Using Demo Cache";
+            // Minimal fallback so app doesn't crash
+            window.SCHOOL_DATABASE = []; 
+            footer.innerText = "Data Offline";
         }
     }
 
@@ -166,10 +159,7 @@
     let currentPropIndex = 0;
     let amenities = [];
     let camera = { x: 0, y: 0 };
-    let targetCamera = { x: 0, y: 0 };
-
-    // ... (Keep existing STATION_CONNECTIONS, AIRPORTS, TYPES, and generateMockProperties logic) ...
-    // Note: I am abbreviating here for brevity, assume the previous CONSTANTS are here
+    
     const STATION_CONNECTIONS = {
         "Wokingham": ["Waterloo (65m)", "Reading (10m)", "Gatwick (55m)", "Guildford (35m)"],
         "Winnersh": ["Waterloo (60m)", "Reading (10m)", "Richmond (50m)"],
@@ -198,11 +188,7 @@
         RESTAURANT: { color: '#ef4444', baseWeight: 15, icon: 'utensils', range: 1500, label: 'Restaurants' } 
     };
 
-    const OFSTED_CACHE = [
-        { key: "holt", name: "The Holt School", rating: "Outstanding", type: "Secondary", date: "15 Nov 2023" },
-        // ... fallback cache if fetch fails ...
-    ];
-
+    // --- 3. LOGIC ---
     function generateMockProperties(lat, lon, areaName) {
         const mockProps = [];
         const streets = ["Woodward Close", "Reading Road", "Robin Hood Lane", "King Street", "Forest Road", "Church Lane"];
@@ -218,7 +204,6 @@
         return mockProps;
     }
 
-    // --- API 1: POSTCODES.IO ---
     async function getCoordinates(postcode) {
         try {
             const r = await fetch(`https://api.postcodes.io/postcodes/${postcode}`);
@@ -227,15 +212,14 @@
         } catch { return null; }
     }
 
-    // --- API 2: OVERPASS API (OSM) ---
     async function getLiveAmenities(lat, lon) {
+        // Only ask OSM for things NOT in our database (Pubs, Trains, Cafes)
+        // REMOVED 'school' query from OSM
         const query = `[out:json];(
             node["amenity"="pub"](around:1500, ${lat}, ${lon});
             node["amenity"="cafe"](around:1200, ${lat}, ${lon});
             node["amenity"="restaurant"](around:1500, ${lat}, ${lon});
             node["railway"="station"](around:3000, ${lat}, ${lon});
-            node["amenity"="school"](around:2500, ${lat}, ${lon});
-            way["amenity"="school"](around:2500, ${lat}, ${lon}); 
         );out center;`;
         try {
             const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
@@ -248,10 +232,35 @@
                 else if (el.tags.amenity === 'pub') type = 'PUB';
                 else if (el.tags.amenity === 'cafe') type = 'CAFE';
                 else if (el.tags.amenity === 'restaurant') type = 'RESTAURANT';
-                else if (el.tags.amenity === 'school') type = 'SCHOOL';
                 return { id: el.id, name: el.tags.name || "Unnamed", type, lat, lon };
             }).filter(i => i.lat && i.name !== "Unnamed");
         } catch { return []; }
+    }
+
+    function getNearbySchoolsFromDB(lat, lon) {
+        // Filter the huge local database for schools within 3000m
+        if(!window.SCHOOL_DATABASE) return [];
+        
+        return window.SCHOOL_DATABASE.map(s => {
+            const dist = getDistanceFromLatLonInKm(lat, lon, s.lat, s.lon) * 1000;
+            if(dist <= 3000) {
+                // Determine Category Score based on rating
+                let cat = 'SCHOOL_GOOD';
+                if(s.rating === 'Outstanding') cat = 'SCHOOL_OUTSTANDING';
+                
+                return {
+                    name: s.name,
+                    type: cat, // Use category as type for scoring
+                    schoolType: s.type, // Primary/Secondary
+                    rating: s.rating,
+                    date: s.date,
+                    lat: s.lat,
+                    lon: s.lon,
+                    dist: dist
+                };
+            }
+            return null;
+        }).filter(s => s !== null);
     }
 
     async function startSearch() {
@@ -267,26 +276,25 @@
         searchCenter = loc;
         document.getElementById('location-label').innerText = loc.area;
 
-        const liveRaw = await getLiveAmenities(loc.lat, loc.lon);
+        // 1. Get OSM Data (Pubs, Trains)
+        const osmData = await getLiveAmenities(loc.lat, loc.lon);
         
-        amenities = liveRaw.map(el => {
-            if (el.type === 'SCHOOL') {
-                // Use the function from schools.js
-                const aug = window.findSchoolRating ? window.findSchoolRating(el.name) : {category:'SCHOOL_GOOD'};
-                el = { ...el, ...aug, type: aug.category };
-            }
-            return el;
-        });
-
-        // Add closest airport
+        // 2. Get School Data (From local JSON)
+        const schoolData = getNearbySchoolsFromDB(loc.lat, loc.lon);
+        
+        // 3. Add Airport
         let nearestAp = null, minD = Infinity;
         AIRPORTS.forEach(ap => {
             const d = getDistanceFromLatLonInKm(loc.lat, loc.lon, ap.lat, ap.lon)*1000;
             if(d < minD) { minD = d; nearestAp = { name: ap.name, type: 'AIRPORT', lat: ap.lat, lon: ap.lon }; }
         });
+        
+        amenities = [...osmData, ...schoolData];
         if(nearestAp) amenities.push(nearestAp);
 
+        // 4. Generate Houses
         properties = generateMockProperties(loc.lat, loc.lon, loc.area);
+        
         status.innerText = `Found ${properties.length} homes & ${amenities.length} amenities.`;
         document.getElementById('bottom-ui').style.opacity = '1';
         loadProperty(0);
@@ -302,7 +310,9 @@
         document.getElementById('prop-price').innerText = '£' + (prop.price/1000).toFixed(0) + 'k';
         document.getElementById('prop-id').innerText = `#${index+1}`;
         
+        // Recalc distances relative to house
         amenities.forEach(a => a.dist = getDistanceFromLatLonInKm(prop.lat, prop.lon, a.lat, a.lon) * 1000);
+        
         updateMapProjection(prop);
         calculateScore();
         draw();
@@ -314,7 +324,6 @@
     function updateMapProjection(center) {
         const toX = (lon) => (lon - center.lon) * (40075000 * Math.cos(center.lat * Math.PI / 180) / 360);
         const toY = (lat) => -(lat - center.lat) * 111320;
-        
         amenities.forEach(a => { a.x = toX(a.lon); a.y = toY(a.lat); });
         properties.forEach(p => { p.x = toX(p.lon); p.y = toY(p.lat); });
     }
@@ -351,7 +360,7 @@
         document.getElementById('score-text').innerText = final + '%';
         document.getElementById('score-circle').style.strokeDashoffset = (2*Math.PI*40)*(1-final/100);
         
-        // Render List
+        // Render
         const groups = {};
         matches.sort((a,b) => a.dist - b.dist);
         matches.forEach(m => { if(!groups[m.label]) groups[m.label] = []; groups[m.label].push(m); });
@@ -373,9 +382,9 @@
                         extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 border-purple-500">Direct: ${conns.join(', ')}</div>`;
                     }
                 } else if(m.type.includes('SCHOOL')) {
-                    const cached = m.rating !== "Unknown";
+                    // We trust the database data now, so no "Unknown" check needed usually, but good to have fallback
                     btn = `<button onclick="toggleDetails('${did}')" class="ml-2 text-[9px] text-blue-300 border border-blue-500/50 px-1 rounded"><i class="fa-solid fa-circle-info"></i></button>`;
-                    extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 ${m.rating==='Outstanding'?'border-green-500':'border-yellow-500'}"><div>Type: ${m.schoolType}</div><div>Rating: ${m.rating}</div>${cached?`<div>Date: ${m.date}</div>`:''}</div>`;
+                    extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 ${m.rating==='Outstanding'?'border-green-500':'border-yellow-500'}"><div>Type: ${m.schoolType}</div><div>Rating: ${m.rating}</div><div>Date: ${m.date}</div></div>`;
                 }
 
                 let dStr = Math.round(m.dist) + "m";
@@ -393,7 +402,6 @@
         return null;
     }
 
-    // --- VISUALS ---
     function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
         const R = 6371; const dLat = (lat2-lat1)*Math.PI/180; const dLon = (lon2-lon1)*Math.PI/180;
         const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
@@ -421,6 +429,10 @@
             ctx.strokeStyle = a.score>0 ? conf.color : '#334155';
             ctx.globalAlpha = a.score>0 ? 0.6 : 0.2; ctx.stroke(); ctx.globalAlpha=1;
             ctx.beginPath(); ctx.arc(sx,sy,4,0,Math.PI*2); ctx.fillStyle = a.score>0 ? conf.color : '#475569'; ctx.fill();
+            if(a.score > 0) {
+                ctx.fillStyle = '#cbd5e1'; ctx.font = '10px Inter'; ctx.textAlign = 'center';
+                ctx.fillText(a.name.substring(0, 15) + (a.name.length>15?'...':''), sx, sy + 15);
+            }
         });
 
         properties.forEach((p,i) => {
