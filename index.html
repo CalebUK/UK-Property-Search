@@ -6,7 +6,6 @@
     <title>Live Property Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- Load Schools Logic -->
     <script src="schools.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #0f172a; font-family: 'Inter', sans-serif; }
@@ -70,12 +69,10 @@
             </div>
         </div>
         
-        <!-- Accordion Container -->
         <div class="space-y-1 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar" id="amenities-list">
             <div class="text-center py-4 text-slate-500 text-xs">Enter a postcode to scan the area...</div>
         </div>
 
-        <!-- Last Updated Footer -->
         <div id="data-footer" class="mt-4 pt-3 border-t border-slate-700 text-[9px] text-slate-500 text-center">
             Loading data version...
         </div>
@@ -124,10 +121,7 @@
             status.innerText = "Connecting to Data...";
             const response = await fetch('all_schools.json');
             
-            if(!response.ok) {
-                // Fallback for demo if file missing
-                throw new Error("Data file pending");
-            }
+            if(!response.ok) throw new Error("Data file pending");
             
             const data = await response.json();
             window.SCHOOL_DATABASE = data.schools; 
@@ -138,14 +132,12 @@
             setTimeout(() => status.innerText = "", 3000);
         } catch (e) {
             console.warn(e);
-            status.innerText = "Using Demo Cache";
-            // Minimal fallback so app doesn't crash
-            window.SCHOOL_DATABASE = []; 
-            footer.innerText = "Data Offline";
+            status.innerText = "Using Offline Cache (Gov Data Pending)";
+            window.SCHOOL_DATABASE = OFSTED_CACHE; 
+            footer.innerText = "Using Offline Data Mode";
         }
     }
 
-    // Call immediately
     window.addEventListener('DOMContentLoaded', loadSchoolData);
 
     // --- 2. CONFIG & STATE ---
@@ -159,7 +151,8 @@
     let currentPropIndex = 0;
     let amenities = [];
     let camera = { x: 0, y: 0 };
-    
+    let targetCamera = { x: 0, y: 0 };
+
     const STATION_CONNECTIONS = {
         "Wokingham": ["Waterloo (65m)", "Reading (10m)", "Gatwick (55m)", "Guildford (35m)"],
         "Winnersh": ["Waterloo (60m)", "Reading (10m)", "Richmond (50m)"],
@@ -188,7 +181,14 @@
         RESTAURANT: { color: '#ef4444', baseWeight: 15, icon: 'utensils', range: 1500, label: 'Restaurants' } 
     };
 
-    // --- 3. LOGIC ---
+    const OFSTED_CACHE = [
+        { key: "holt", name: "The Holt School", rating: "Outstanding", type: "Secondary", date: "15 Nov 2023", nursery: false },
+        { key: "st paul", name: "St Paul's Junior", rating: "Outstanding", type: "Primary", date: "12 Mar 2022", nursery: false },
+        { key: "walter", name: "Walter Infant", rating: "Outstanding", type: "Primary", date: "05 Jun 2024", nursery: true },
+        { key: "evendons", name: "Evendons Primary", rating: "Outstanding", type: "Primary", date: "22 Oct 2022", nursery: false },
+        { key: "winnersh primary", name: "Winnersh Primary", rating: "Good", type: "Primary", date: "18 May 2022", nursery: true }
+    ];
+
     function generateMockProperties(lat, lon, areaName) {
         const mockProps = [];
         const streets = ["Woodward Close", "Reading Road", "Robin Hood Lane", "King Street", "Forest Road", "Church Lane"];
@@ -213,8 +213,6 @@
     }
 
     async function getLiveAmenities(lat, lon) {
-        // Only ask OSM for things NOT in our database (Pubs, Trains, Cafes)
-        // REMOVED 'school' query from OSM
         const query = `[out:json];(
             node["amenity"="pub"](around:1500, ${lat}, ${lon});
             node["amenity"="cafe"](around:1200, ${lat}, ${lon});
@@ -238,25 +236,15 @@
     }
 
     function getNearbySchoolsFromDB(lat, lon) {
-        // Filter the huge local database for schools within 3000m
         if(!window.SCHOOL_DATABASE) return [];
-        
         return window.SCHOOL_DATABASE.map(s => {
             const dist = getDistanceFromLatLonInKm(lat, lon, s.lat, s.lon) * 1000;
             if(dist <= 3000) {
-                // Determine Category Score based on rating
                 let cat = 'SCHOOL_GOOD';
                 if(s.rating === 'Outstanding') cat = 'SCHOOL_OUTSTANDING';
-                
                 return {
-                    name: s.name,
-                    type: cat, // Use category as type for scoring
-                    schoolType: s.type, // Primary/Secondary
-                    rating: s.rating,
-                    date: s.date,
-                    lat: s.lat,
-                    lon: s.lon,
-                    dist: dist
+                    name: s.name, type: cat, schoolType: s.type, rating: s.rating, date: s.date,
+                    nursery: s.nursery, lat: s.lat, lon: s.lon, dist: dist
                 };
             }
             return null;
@@ -276,13 +264,9 @@
         searchCenter = loc;
         document.getElementById('location-label').innerText = loc.area;
 
-        // 1. Get OSM Data (Pubs, Trains)
         const osmData = await getLiveAmenities(loc.lat, loc.lon);
-        
-        // 2. Get School Data (From local JSON)
         const schoolData = getNearbySchoolsFromDB(loc.lat, loc.lon);
         
-        // 3. Add Airport
         let nearestAp = null, minD = Infinity;
         AIRPORTS.forEach(ap => {
             const d = getDistanceFromLatLonInKm(loc.lat, loc.lon, ap.lat, ap.lon)*1000;
@@ -292,7 +276,6 @@
         amenities = [...osmData, ...schoolData];
         if(nearestAp) amenities.push(nearestAp);
 
-        // 4. Generate Houses
         properties = generateMockProperties(loc.lat, loc.lon, loc.area);
         
         status.innerText = `Found ${properties.length} homes & ${amenities.length} amenities.`;
@@ -310,9 +293,7 @@
         document.getElementById('prop-price').innerText = '£' + (prop.price/1000).toFixed(0) + 'k';
         document.getElementById('prop-id').innerText = `#${index+1}`;
         
-        // Recalc distances relative to house
         amenities.forEach(a => a.dist = getDistanceFromLatLonInKm(prop.lat, prop.lon, a.lat, a.lon) * 1000);
-        
         updateMapProjection(prop);
         calculateScore();
         draw();
@@ -340,7 +321,6 @@
         amenities.forEach(a => {
             const conf = TYPES[a.type];
             if(!conf) return;
-            
             let mult = 1;
             if(a.type.includes('SCHOOL')) mult = prefs.schoolWeight/5;
             else if(a.type.includes('TRANSPORT') || a.type === 'AIRPORT') mult = prefs.commuteWeight/5;
@@ -352,7 +332,6 @@
             } else if (a.dist < conf.range) {
                 score = Math.round(conf.baseWeight * mult * (1 - a.dist/conf.range));
             }
-            
             if(score > 0) { total += score; matches.push({...a, score, ...conf}); }
         });
 
@@ -360,7 +339,6 @@
         document.getElementById('score-text').innerText = final + '%';
         document.getElementById('score-circle').style.strokeDashoffset = (2*Math.PI*40)*(1-final/100);
         
-        // Render
         const groups = {};
         matches.sort((a,b) => a.dist - b.dist);
         matches.forEach(m => { if(!groups[m.label]) groups[m.label] = []; groups[m.label].push(m); });
@@ -382,9 +360,23 @@
                         extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 border-purple-500">Direct: ${conns.join(', ')}</div>`;
                     }
                 } else if(m.type.includes('SCHOOL')) {
-                    // We trust the database data now, so no "Unknown" check needed usually, but good to have fallback
                     btn = `<button onclick="toggleDetails('${did}')" class="ml-2 text-[9px] text-blue-300 border border-blue-500/50 px-1 rounded"><i class="fa-solid fa-circle-info"></i></button>`;
-                    extra = `<div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 ${m.rating==='Outstanding'?'border-green-500':'border-yellow-500'}"><div>Type: ${m.schoolType}</div><div>Rating: ${m.rating}</div><div>Date: ${m.date}</div></div>`;
+                    
+                    const borderColor = m.rating === 'Outstanding' ? 'border-green-500' : (m.rating === 'Unknown' ? 'border-slate-500' : 'border-yellow-500');
+                    const ratingClass = m.rating === 'Outstanding' ? 'text-green-400' : (m.rating === 'Unknown' ? 'text-slate-400' : 'text-yellow-400');
+                    
+                    // NURSERY CHECK
+                    const nurseryHtml = m.nursery ? `<span class="bg-pink-900/50 text-pink-300 px-1.5 py-0.5 rounded text-[9px] border border-pink-500/30 ml-2">👶 Nursery</span>` : '';
+
+                    extra = `
+                        <div id="${did}" class="hidden mt-1 ml-6 p-2 bg-slate-900/80 rounded text-[10px] text-slate-300 border-l-2 ${borderColor}">
+                            <div class="flex items-center mb-1">
+                                <span class="text-slate-400 mr-1">Type:</span> <span class="font-semibold text-white">${m.schoolType}</span>
+                                ${nurseryHtml}
+                            </div>
+                            <div class="text-slate-400">Rating: <span class="font-bold ${ratingClass}">${m.rating}</span></div>
+                            <div class="text-[9px] text-slate-500 mt-0.5">Insp: ${m.date}</div>
+                        </div>`;
                 }
 
                 let dStr = Math.round(m.dist) + "m";
