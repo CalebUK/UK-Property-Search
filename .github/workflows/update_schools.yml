@@ -1,0 +1,39 @@
+name: Update School Data
+
+on:
+  schedule:
+    # Run at 04:00 on the 1st of every month
+    - cron: '0 4 1 * *'
+  workflow_dispatch: # Allows you to run it manually button click
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Run Fetch Script
+      run: python fetch_schools.py
+
+    - name: Commit and push if changed
+      run: |
+        git config user.name "SchoolDataBot"
+        git config user.email "actions@github.com"
+        git add all_schools.json
+        git commit -m "📅 Auto-update: Monthly school data refresh" || exit 0
+        git push
